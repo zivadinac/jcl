@@ -57,6 +57,29 @@ def interpolate_position(x, y=None, unknown_val=-1, interp_order=1):
     
     return x_i
 
+def trial_duration(xy_trajectory, sampling_rate=40):
+    """ Compute trial duration based on given trajectory and sampling rate.
+
+    Args:
+        xy_trajectory - animal trajectory during a trial, array of shape (n,2)
+        sampling_rate - number of samples per second (Hz)
+    Return:
+        Time (in seconds)
+    """
+    return len(xy_trajectory) * (1000000 / sampling_rate) / 1000000 # in seconds
+
+def trial_distance(xy_trajectory):
+    """ Compute trial duration based on given trajectory.
+
+    Args:
+        xy_trajectory - animal trajectory during a trial, array of shape (n,2)
+    Return:
+        Distance covered by the trajectory (in the same units as xy_trajectory)
+    """
+    diffs = xy_trajectory[1:,:] - xy_trajectory[0:-1,:]
+    distances = np.linalg.norm(diffs, axis=1)
+    return distances.sum()
+
 """
 # quick test
 # TODO unit tests
