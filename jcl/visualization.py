@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors.LinearSegmentedColormap import from_list
+from matplotlib.colors import LinearSegmentedColormap
+from_list = LinearSegmentedColormap.from_list
 from matplotlib.cm import ScalarMappable
 from jcl.utils import trial_distance
 
