@@ -1,71 +1,99 @@
 import numpy as np
-from os.path import join
 
-def spike_times_from_res_and_clu(res_path, clu_path):
-    """ Load spike times for each neuron from provided '.res' and '.clu' files.
+def __to_ms(x, sampling_period):
+    """ Convert time `x` to ms.
+
+        Args:
+            x - time to be converted (number or array of numbers)
+            sampling_period - sampling period in ms
+        Return:
+            Converted data of the same type as `x`
+    """
+    return x * sampling_period
+
+def readfromtxt(file_path, conv_fun=str):
+    """ Read lines from a text file into a list.
+
+        Args:
+            file_path - path to the text file
+            conv_fun - conversion to be done on a line
+        Return:
+            List of elements converted using conv_fun
+    """
+    with open(file_path) as f:
+        lines = [conv_fun(l) for l in f]
+    return lines
+
+def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True):
+    """ Load spike times for each neuron from provided '.res' and '.clu' files. Doesn't include noise clusters (0 and 1).
         
         Args:
-            res_path - path to res file
+            res_path - path to res file (sorted in a non-descending order)
             clu_path - path to clu file
+            exclude_noise_clusters - by default don't return spikes belonging to noise clusers (0 - artifacts and 1 - unassigned spikes)
         Return:
-            List of firing times for each cell (list of lists)
+            List of firing times for each cell (list of np.arrays)
     """
-    clu = np.genfromtxt(clu_path, dtype=int)
-    res = np.genfromtxt(res_path, dtype=int)
+    # .clu and .res files are big
+    # so we use our faster implementation
+    # instead of np.genfromtxt
+    clu = np.array(readfromtxt(clu_path, conv_fun=int))
+    res = np.array(readfromtxt(res_path, conv_fun=int))
     assert len(clu) == len(res) or len(clu) == len(res) + 1
 
-    if len(clu) == len(res) + 1: # has number of clusters written in the first line
+    if len(clu) == len(res) + 1:
+        # number of clusters is written in the first line
+        clu_num = clu[0]
         clu = clu[1:]
-                                               
-    spike_times = []
-    for i in range(2, np.max(clu) + 1): # cluster 0 and 1 are noise
-        spike_times.append(res[np.where(clu == i)[0]])
+    else:
+        clu_num = clu.max()
+
+    first_clu = 2 if exclude_noise_clusters else 0
+    spike_times = [res[clu == i] for i in range(first_clu, clu_num + 1)]
+
     return spike_times
 
-def population_vectors_from_spike_times(spike_times, bin_len=102.4, bin_overlap=0., sampling_period=0.05):
-    """ Produce population vectors for given spike times.
+def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16):
+    """ Bin given spike times, each bin contains total number of spikes.
 
         Args:
-            spike_times - list of spike time for each neuron (list of lists)
-            bin_len - length of a bin in ms
-            bin_overlap - temporal overlap between succesive bins
-            sampling_period - sampling period in ms (default 1/20kHz = 0.05ms)
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+            bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
+            sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+            dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store only up to 256 spikes per bin)
         Return:
             Matrix (neuron num, time bins) of with spike count in each bin
     """
-    # ms, for 20kHz sampling rate
-    maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
-    last_spike_time = sampling_period * np.max(maxes) # in ms
+    # leave this two lines here in case we find non-sorted spikes (.res files)
+    # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
+    # last_spike_time = __to_ms(np.max(maxes), sampling_period)  # in ms
+    last_spike_time = np.max([__to_ms(st[-1], sampling_period) for st in spike_times])
+
     bin_num = np.ceil(last_spike_time / bin_len).astype(int)
-    if bin_overlap > 0.:
-        bin_num += (bin_num - 1)
-    population_vectors = np.zeros((len(spike_times), bin_num))
+    bin_edges = np.arange(bin_num + 1) * bin_len
 
+    binned_data = np.empty((len(spike_times), bin_num), dtype=np.uint16)
     for n, st in enumerate(spike_times):
-        st_ms = np.array(st) * sampling_period
-        #odd_bin_inds = ((np.array(st) * sampling_period) // bin_len).astype(int)
-        #even_bin_inds = ((np.array(st[st > bin_overlap]) * sampling_period) // bin_len).astype(int)
-        for i in range(bin_num):
-            l = i * bin_overlap if bin_overlap > 0 else i * bin_len
-            h = l + bin_len
-            spikes_in_bin_i = np.logical_and(st_ms >= l, st_ms < h)
-            population_vectors[n, i] += len(st_ms[spikes_in_bin_i])
-    return population_vectors
+        st_ms = __to_ms(np.array(st), sampling_period)
+        hist = np.histogram(st_ms, bins=bin_edges)[0]
+        binned_data[n] = hist
 
-def population_vectors(res_path, clu_path, bin_len=102.4, bin_overlap=0., sampling_period=0.05):
+    return binned_data
+
+def bins(res_path, clu_path, bin_len=25.6, sampling_period=0.05, dtype=np.uint16):
     """ Produce population vectors for given '.res' and '.clu' files.
 
         Args:
             res_path - path to res file
             clu_path - path to clu file
-            bin_len - length of a bin in ms
-            bin_overlap - temporal overlap between succesive bins
+            bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
             sampling_period - sampling period in ms (default 1/20kHz = 0.05ms)
+            dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store up to 256 spikes per bin)
         Return:
             Matrix (neuron num, time bins) of with spike count in each bin
     """
     st = spike_times_from_res_and_clu(res_path, clu_path)
-    return population_vectors_from_spike_times(st, bin_len, bin_overlap, sampling_period)
+    return bins_from_spike_times(st, bin_len, sampling_period)
 
 def cell_types(des_path):
     """ Read cell types from '.des' file.
@@ -73,7 +101,7 @@ def cell_types(des_path):
             'pu' - unknown pyramidal
             'b1' - CA1 interneuron
             'bu' - unknown interneuron
-        
+
         Args:
             des_path - path to des file
         Return:
@@ -100,18 +128,6 @@ def positions_and_speed_from_whl2(whl2_path):
             Array with positions (N, 2), array with speed (N)
     """
     d = np.genfromtxt(whl2_path)
-    return d[:, [0,1]], d[:, 2]
+    return d[:, [0, 1]], d[:, 2]
 
-"""
-# quick test
 # TODO unit tests
-st = [[4,7,12,17,23,27,35,41,43,48]]
-pv = population_vectors_from_spike_times(st, bin_len=10, bin_overlap=5, sampling_period=1)
-data_folder = "/home/pzivadin/external_drive/Dama_merged/mDRCCK17-30052018-0110"
-basename = join(data_folder, "mDRCCK17-30052018-0110_2")
-spike_times = spike_times_from_res_and_clu(basename + ".res", basename + ".clu")
-fr = population_vectors_from_spike_times(spike_times, bin_len=307.2, bin_overlap=153.6)
-fr_2 = population_vectors_from_spike_times(spike_times, bin_len=307.2)
-p,s = positions_and_speed_from_whl2(basename + ".whl2")
-ct = cell_types(basename + ".des")
-"""
