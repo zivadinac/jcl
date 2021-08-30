@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.sparse import lil_matrix, csc_matrix
 
 def __to_ms(x, sampling_period):
     """ Convert time `x` to ms.
@@ -53,7 +54,7 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True
 
     return spike_times
 
-def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16):
+def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
     """ Bin given spike times, each bin contains total number of spikes.
 
         Args:
@@ -61,39 +62,48 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
             bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
             sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
             dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store only up to 256 spikes per bin)
+            dense_loading - if True (default) load data into a dense np.ndarray then convert to a `return_mat_type` (fast), if False load into a sparse matrix (slow, but memory efficient)
+            return_mat_type - type of matrix to be returned (default is sparse `csc_matrix` for efficient storage and relatively fast column slicing)
         Return:
-            Matrix (neuron num, time bins) of with spike count in each bin
+            Matrix with spike count per bin ((neuron num, time bins), `return_mat_type`)
     """
     # leave this two lines here in case we find non-sorted spikes (.res files)
     # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
     # last_spike_time = __to_ms(np.max(maxes), sampling_period)  # in ms
     last_spike_time = np.max([__to_ms(st[-1], sampling_period) for st in spike_times])
-
     bin_num = np.ceil(last_spike_time / bin_len).astype(int)
     bin_edges = np.arange(bin_num + 1) * bin_len
 
-    binned_data = np.empty((len(spike_times), bin_num), dtype=np.uint16)
+    if dense_loading:
+        # fastest loading (due to indexing), but requires a lot of memory
+        binned_data = np.empty((len(spike_times), bin_num), dtype=np.uint16)
+    else:
+        # lil_matrix is fast for loading rows, convert later to return_mat_type
+        binned_data = lil_matrix((len(spike_times), bin_num), dtype=np.uint16)
+
     for n, st in enumerate(spike_times):
         st_ms = __to_ms(np.array(st), sampling_period)
         hist = np.histogram(st_ms, bins=bin_edges)[0]
         binned_data[n] = hist
 
-    return binned_data
+    return return_mat_type(binned_data)
 
-def bins(res_path, clu_path, bin_len=25.6, sampling_period=0.05, dtype=np.uint16):
-    """ Produce population vectors for given '.res' and '.clu' files.
+def bins(res_path, clu_path, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
+    """ Bin spike times given '.res' and '.clu' files, each bin contains total number of spikes (without noise clusters).
 
         Args:
             res_path - path to res file
             clu_path - path to clu file
             bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
-            sampling_period - sampling period in ms (default 1/20kHz = 0.05ms)
-            dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store up to 256 spikes per bin)
+            sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+            dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store only up to 256 spikes per bin)
+            dense_loading - if `return_dense` is True this is ignored and only dense np.ndarray will be used; otherwise: if True (default) load data into a dense array then convert to a sparse matrix (fast), if False load straight into a sparse matrix (requires less memory, but significantly slower)
+            return_mat_type - if `return_dense` is True this is ignored; otherwise: type of sparse matrix to be returned (default `csc_matrix` for fast column slicing)
         Return:
-            Matrix (neuron num, time bins) of with spike count in each bin
+            Matrix of shape (neuron num, time bins) with spike count in each bin (np.array or csc_matrix, depending on `return_dense`)
     """
     st = spike_times_from_res_and_clu(res_path, clu_path)
-    return bins_from_spike_times(st, bin_len, sampling_period)
+    return bins_from_spike_times(st, bin_len, sampling_period, dense_loading, return_mat_type)
 
 def cell_types(des_path):
     """ Read cell types from '.des' file.
