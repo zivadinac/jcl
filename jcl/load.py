@@ -26,8 +26,8 @@ def readfromtxt(file_path, conv_fun=str):
     return lines
 
 def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True):
-    """ Load spike times for each neuron from provided '.res' and '.clu' files. Doesn't include noise clusters (0 and 1).
-        
+    """ Load spike times for each neuron from provided '.res' and '.clu' files. Doesn't include clusters without spikes.
+
         Args:
             res_path - path to res file (sorted in a non-descending order)
             clu_path - path to clu file
@@ -51,6 +51,7 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True
 
     first_clu = 2 if exclude_noise_clusters else 0
     spike_times = [res[clu == i] for i in range(first_clu, clu_num + 1)]
+    spike_times = list(filter(lambda l: len(l) > 0, spike_times))
 
     return spike_times
 
