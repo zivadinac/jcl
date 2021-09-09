@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 
+
 def align_measured_data(population_vectors, positions, num_bins, speed=None):
     l = positions.shape[0] // num_bins
     if l < population_vectors.shape[1]:
@@ -55,6 +56,7 @@ def interpolate_position(x, y=None, unknown_val=-1, interp_order=1):
         return x_i, y_i
     return x_i
 
+
 def trial_duration(xy_trajectory, sampling_rate=39.0625):
     """ Compute trial duration in seconds based on given trajectory and sampling rate.
 
@@ -65,6 +67,7 @@ def trial_duration(xy_trajectory, sampling_rate=39.0625):
         Duration in seconds
     """
     return len(xy_trajectory) / sampling_rate  # in seconds
+
 
 def trial_distance(xy_trajectory):
     """ Compute trial duration based on given trajectory.
@@ -78,6 +81,34 @@ def trial_distance(xy_trajectory):
     distances = np.linalg.norm(diffs, axis=1)
     return distances.sum()
 
+
+def concatenate_spike_times(*all_spike_times):
+    """ Concatenate spike times from different sessions (shift appropriately).
+
+        Args:
+            all_spike_times - spike times (list of lists) for every session
+        Return:
+            concatenated spike times (list of lists)
+    """
+    def __get_last_spike_time(spike_times):
+        return np.max([st[-1] for st in spike_times])
+
+    unit_nums = np.array([len(st) for st in all_spike_times])
+    if not np.all(unit_nums == unit_nums[0]):
+        raise ValueError("All given spike times (sessions) must have equal number of units.")
+
+    last_spike_times = [__get_last_spike_time(st) for st in all_spike_times]
+    session_shifts = [0] + np.cumsum(last_spike_times)[:-1].tolist()
+    assert len(session_shifts) == len(all_spike_times)
+    cat_spike_times = []
+
+    for u in range(unit_nums[0]):
+        all_st_u = [np.array(st[u]) for st in all_spike_times]
+        all_st_u_shifted = [all_st_u[i] + session_shifts[i] for i in range(len(all_st_u))]
+        cat_spike_times.append(np.concatenate(all_st_u_shifted))
+
+    return cat_spike_times
+
 # TODO unit tests
 """
 # quick test
@@ -86,6 +117,7 @@ x = [1, 2, -1, 4, 5, 6]
 y = [-1, 2, 3, -1, 5, -1]
 
 x_i, y_i = interpolate_position(x, y)
+
 
 #pv, pp, ss = align_measured_data(fr, p, 4, speed=s)
 """
