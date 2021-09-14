@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix, csc_matrix
+from jcl.utils import get_last_spike_time
 
 def __to_ms(x, sampling_period):
     """ Convert time `x` to ms.
@@ -24,6 +25,7 @@ def readfromtxt(file_path, conv_fun=str):
     with open(file_path) as f:
         lines = [conv_fun(l) for l in f]
     return lines
+
 
 def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True):
     """ Load spike times for each neuron from provided '.res' and '.clu' files. Doesn't include clusters without spikes.
@@ -54,6 +56,25 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True
     spike_times = list(filter(lambda l: len(l) > 0, spike_times))
 
     return spike_times
+
+
+def slice_spike_times(spike_times, begin_ts, end_ts):
+    """ Return only spike times between given timestamps.
+
+        Args:
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+            begin_ts - spike times greater or equal than this
+            end_ts - spikes times less than this
+
+        Return:
+            Sliced spike times (list of np.arrays)
+    """
+    if begin_ts <= 0 and end_ts >= get_last_spike_time(spike_times):
+        # no need to iterate over spike_times
+        # if the given range contains all of them
+        return spike_times
+    return [st[np.logical_and(st >= begin_ts, st < end_ts)] for st in spike_times]
+
 
 def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
     """ Bin given spike times, each bin contains total number of spikes.
@@ -89,6 +110,7 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
 
     return return_mat_type(binned_data)
 
+
 def bins(res_path, clu_path, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
     """ Bin spike times given '.res' and '.clu' files, each bin contains total number of spikes (without noise clusters).
 
@@ -106,6 +128,7 @@ def bins(res_path, clu_path, bin_len=25.6, sampling_period=0.05, dtype=np.uint16
     st = spike_times_from_res_and_clu(res_path, clu_path)
     return bins_from_spike_times(st, bin_len, sampling_period, dense_loading, return_mat_type)
 
+
 def cell_types(des_path):
     """ Read cell types from '.des' file.
             'p1' - CA1 pyramidal
@@ -120,6 +143,7 @@ def cell_types(des_path):
     """
     return np.genfromtxt(des_path, dtype=str)
 
+
 def positions_from_whl(whl_path):
     """ Load animal positions from '.whl' file.
 
@@ -129,6 +153,7 @@ def positions_from_whl(whl_path):
             Array with positions (N, led * 2)
     """
     return np.genfromtxt(whl_path)
+
 
 def positions_and_speed_from_whl2(whl2_path):
     """ Load animal positions and speed from '.whl2' file.
@@ -141,4 +166,24 @@ def positions_and_speed_from_whl2(whl2_path):
     d = np.genfromtxt(whl2_path)
     return d[:, [0, 1]], d[:, 2]
 
+
+def session_limits(resofs_path):
+    """ Read session limits from a .resofs file.
+
+        Args:
+            resofs_path - path to the .reso file
+        Return:
+            session limits (list of tuples)
+    """
+    resofs = readfromtxt(resofs_path, int)
+    num_sessions = len(resofs)
+    resofs = [0] + resofs
+    return [(resofs[i], resofs[i+1]) for i in range(num_sessions)]
+
 # TODO unit tests
+
+
+"""
+st = [np.array([1,3,5,7,9,11]), np.array([2,4,6,8,10,12,14])]
+sts = slice_spike_times(st, 4, 14)
+"""

@@ -82,6 +82,17 @@ def trial_distance(xy_trajectory):
     return distances.sum()
 
 
+def get_last_spike_time(spike_times):
+    """ Get the timestamp of the last spike.
+
+        Args:
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+        Return:
+            Last spike timestamp (int)
+    """
+    return np.max([st[-1] for st in spike_times])
+
+
 def concatenate_spike_times(*all_spike_times):
     """ Concatenate spike times from different sessions (shift appropriately).
 
@@ -90,14 +101,12 @@ def concatenate_spike_times(*all_spike_times):
         Return:
             concatenated spike times (list of lists)
     """
-    def __get_last_spike_time(spike_times):
-        return np.max([st[-1] for st in spike_times])
 
     unit_nums = np.array([len(st) for st in all_spike_times])
     if not np.all(unit_nums == unit_nums[0]):
         raise ValueError("All given spike times (sessions) must have equal number of units.")
 
-    last_spike_times = [__get_last_spike_time(st) for st in all_spike_times]
+    last_spike_times = [get_last_spike_time(st) for st in all_spike_times]
     session_shifts = [0] + np.cumsum(last_spike_times)[:-1].tolist()
     assert len(session_shifts) == len(all_spike_times)
     cat_spike_times = []
