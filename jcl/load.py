@@ -1,17 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix, csc_matrix
-from jcl.utils import get_last_spike_time
-
-def __to_ms(x, sampling_period):
-    """ Convert time `x` to ms.
-
-        Args:
-            x - time to be converted (number or array of numbers)
-            sampling_period - sampling period in ms
-        Return:
-            Converted data of the same type as `x`
-    """
-    return x * sampling_period
+from jcl.utils import get_last_spike_time, to_ms
 
 def readfromtxt(file_path, conv_fun=str):
     """ Read lines from a text file into a list.
@@ -28,7 +17,7 @@ def readfromtxt(file_path, conv_fun=str):
 
 
 def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True):
-    """ Load spike times for each neuron from provided '.res' and '.clu' files. Doesn't include clusters without spikes.
+    """ Load spike times for each neuron from provided '.res' and '.clu' files.
 
         Args:
             res_path - path to res file (sorted in a non-descending order)
@@ -53,7 +42,6 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True
 
     first_clu = 2 if exclude_noise_clusters else 0
     spike_times = [res[clu == i] for i in range(first_clu, clu_num + 1)]
-    spike_times = list(filter(lambda l: len(l) > 0, spike_times))
 
     return spike_times
 
@@ -73,7 +61,7 @@ def slice_spike_times(spike_times, begin_ts, end_ts):
         # no need to iterate over spike_times
         # if the given range contains all of them
         return spike_times
-    return [st[np.logical_and(st >= begin_ts, st < end_ts)] for st in spike_times]
+    return [st[np.logical_and(st >= begin_ts, st < end_ts)] if len(st) > 0 else st for st in spike_times]
 
 
 def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
@@ -91,8 +79,8 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
     """
     # leave this two lines here in case we find non-sorted spikes (.res files)
     # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
-    # last_spike_time = __to_ms(np.max(maxes), sampling_period)  # in ms
-    last_spike_time = np.max([__to_ms(st[-1], sampling_period) for st in spike_times])
+    # last_spike_time = to_ms(np.max(maxes), sampling_period)  # in ms
+    last_spike_time = np.max([to_ms(st[-1], sampling_period) for st in spike_times])
     bin_num = np.ceil(last_spike_time / bin_len).astype(int)
     bin_edges = np.arange(bin_num + 1) * bin_len
 
@@ -104,7 +92,7 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
         binned_data = lil_matrix((len(spike_times), bin_num), dtype=np.uint16)
 
     for n, st in enumerate(spike_times):
-        st_ms = __to_ms(np.array(st), sampling_period)
+        st_ms = to_ms(np.array(st), sampling_period)
         hist = np.histogram(st_ms, bins=bin_edges)[0]
         binned_data[n] = hist
 

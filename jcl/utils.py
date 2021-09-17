@@ -118,6 +118,32 @@ def concatenate_spike_times(*all_spike_times):
 
     return cat_spike_times
 
+def to_ms(x, sampling_period):
+    """ Convert time `x` to ms.
+
+        Args:
+            x - time to be converted (number or array of numbers)
+            sampling_period - sampling period in ms
+        Return:
+            Converted data of the same type as `x`
+    """
+    return x * sampling_period
+
+def __elapsed(st, sampling_period):
+    """ Compute elapsed time (in s) between the first and the last spike in given list of spike times."""
+    return None if len(st) <= 0 else sampling_period * (st[-1]-st[0]) / 1000
+
+def compute_frs(spike_times, sampling_period=0.05):
+    """ Compute firing rate (in Hz) for each neuron in given spike times.
+
+        Args:
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+            sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+        Return:
+            List of firing rates.
+    """
+    return [len(st) / __elapsed(st, sampling_period) if len(st) > 0 else 0 for st in spike_times]
+
 # TODO unit tests
 """
 # quick test
