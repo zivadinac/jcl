@@ -61,7 +61,13 @@ def slice_spike_times(spike_times, begin_ts, end_ts):
         # no need to iterate over spike_times
         # if the given range contains all of them
         return spike_times
-    return [st[np.logical_and(st >= begin_ts, st < end_ts)] if len(st) > 0 else st for st in spike_times]
+
+    def __get_inds(st, b, e):
+        g = np.where(st >= b)
+        l = np.where(st < e)
+        return np.intersect1d(g, l)
+
+    return [st[__get_inds(st, begin_ts, end_ts)] if len(st) > 0 else st for st in spike_times]
 
 
 def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
@@ -80,7 +86,7 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
     # leave this two lines here in case we find non-sorted spikes (.res files)
     # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
     # last_spike_time = to_ms(np.max(maxes), sampling_period)  # in ms
-    last_spike_time = np.max([to_ms(st[-1], sampling_period) for st in spike_times])
+    last_spike_time = np.max([to_ms(st[-1], sampling_period) if len(st) > 0 else 0 for st in spike_times])
     bin_num = np.ceil(last_spike_time / bin_len).astype(int)
     bin_edges = np.arange(bin_num + 1) * bin_len
 
