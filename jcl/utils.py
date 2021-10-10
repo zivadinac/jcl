@@ -93,6 +93,22 @@ def get_last_spike_time(spike_times):
     return np.max([st[-1] for st in spike_times])
 
 
+def compute_bins(spike_times, bin_len=25.6, sampling_period=0.05):
+    """ Compute bin edges for given spike times.
+
+        Args:
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+            bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
+            sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+        Return:
+            List of bin edges (in ms), total number of bins
+    """
+    last_spike_time = np.max([to_ms(st[-1], sampling_period) if len(st) > 0 else 0 for st in spike_times])
+    bin_num = np.ceil(last_spike_time / bin_len).astype(int)
+    bin_edges = np.arange(bin_num + 1) * bin_len
+    return bin_edges, bin_num
+
+
 def concatenate_spike_times(*all_spike_times, shift_sessions=True):
     """ Concatenate spike times from different sessions (shift appropriately).
 

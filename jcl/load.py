@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix, csc_matrix
-from jcl.utils import get_last_spike_time, to_ms
+from jcl.utils import get_last_spike_time, to_ms, compute_bins
 
 def readfromtxt(file_path, conv_fun=str):
     """ Read lines from a text file into a list.
@@ -86,9 +86,7 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
     # leave this two lines here in case we find non-sorted spikes (.res files)
     # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
     # last_spike_time = to_ms(np.max(maxes), sampling_period)  # in ms
-    last_spike_time = np.max([to_ms(st[-1], sampling_period) if len(st) > 0 else 0 for st in spike_times])
-    bin_num = np.ceil(last_spike_time / bin_len).astype(int)
-    bin_edges = np.arange(bin_num + 1) * bin_len
+    bin_edges, bin_num = compute_bins(spike_times, bin_len, sampling_period)
 
     if dense_loading:
         # fastest loading (due to indexing), but requires a lot of memory
