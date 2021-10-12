@@ -37,8 +37,8 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0,1]):
         # number of clusters is written in the first line
         clu = clu[1:]
 
-    clu = np.setdiff1d(clu, exclude_clusters) # keep only clusters that are not in `exclude_clusters`
-    return [res[clu == c] for c in clu]
+    clusters = np.setdiff1d(clu, exclude_clusters)  # keep only clusters that are not in `exclude_clusters`
+    return [res[clu == c] for c in clusters]
 
 
 def slice_spike_times(spike_times, begin_ts, end_ts):
