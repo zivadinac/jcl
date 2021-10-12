@@ -16,13 +16,13 @@ def readfromtxt(file_path, conv_fun=str):
     return lines
 
 
-def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True):
+def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0,1]):
     """ Load spike times for each neuron from provided '.res' and '.clu' files.
 
         Args:
             res_path - path to res file (sorted in a non-descending order)
             clu_path - path to clu file
-            exclude_noise_clusters - by default don't return spikes belonging to noise clusers (0 - artifacts and 1 - unassigned spikes)
+            exclude_clusters - clusters to exclude (by default exclude noise clusters: 0 - artifacts and 1 - unassigned spikes)
         Return:
             List of firing times for each cell (list of np.arrays)
     """
@@ -35,15 +35,10 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_noise_clusters=True
 
     if len(clu) == len(res) + 1:
         # number of clusters is written in the first line
-        clu_num = clu[0]
         clu = clu[1:]
-    else:
-        clu_num = clu.max()
 
-    first_clu = 2 if exclude_noise_clusters else 0
-    spike_times = [res[clu == i] for i in range(first_clu, clu_num + 1)]
-
-    return spike_times
+    clu = np.setdiff1d(clu, exclude_clusters) # keep only clusters that are not in `exclude_clusters`
+    return [res[clu == c] for c in clu]
 
 
 def slice_spike_times(spike_times, begin_ts, end_ts):
