@@ -82,6 +82,24 @@ def trial_distance(xy_trajectory):
     return distances.sum()
 
 
+def calc_speed(positions, bin_len):
+    """ Calculate animal speed. Units of positions / s.
+
+        Args:
+            positions - array of positions of shape (n,1) or (n,2)
+            bin_len - duration of temporal bins in ms
+        Return:
+            speed - animal speed in each recorded point, same shape as positions
+    """
+    speed = []
+    for i in range(1, len(positions)):
+        prev_p = positions[i-1]
+        current_p = positions[i]
+        dist = np.linalg.norm(current_p-prev_p)
+        speed.append(dist / (bin_len / 1000))
+    return [speed[0]] + speed
+
+
 def get_last_spike_time(spike_times):
     """ Get the timestamp of the last spike.
 
