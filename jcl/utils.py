@@ -108,7 +108,18 @@ def get_last_spike_time(spike_times):
         Return:
             Last spike timestamp (int)
     """
-    return np.max([st[-1] for st in spike_times])
+    return np.max([st[-1] for st in spike_times if len(st) > 0])
+
+
+def get_first_spike_time(spike_times):
+    """ Get the timestamp of the first spike.
+
+        Args:
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+        Return:
+            First spike timestamp (int)
+    """
+    return np.min([st[0] for st in spike_times if len(st) > 0])
 
 
 def compute_bins(spike_times, bin_len=25.6, sampling_period=0.05):
