@@ -84,6 +84,33 @@ def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, traj
     plt.close()
 
 
+def plot_trials_in_session(trial_inds, sampling_rate=None, path=None):
+    """ Visualize trials in within recording session.
+
+        Args:
+            trial_inds - list of trial indices (list of tuples)
+            sampling_rate - whl sampling rate, if None (default) time won't be converted to seconds
+            path - path to which save the image
+    """
+    if sampling_rate is not None:
+        trial_inds = [(t[0] / sampling_rate, t[1] / sampling_rate) for t in trial_inds]
+        plt.xlabel("Time (s)")
+
+    for i, t in enumerate(trial_inds):
+        plt.fill_betweenx([0, 1], t[0], t[1], color="orange", alpha=.45)
+        txt = f"Trial {i+1}"
+        if sampling_rate is not None:
+            txt += f" ({np.round(t[1]-t[0], 2)}s)"
+        plt.text((t[0]+t[1])/2, .5, txt, rotation="vertical")
+
+    plt.yticks([])
+
+    if path is None:
+        plt.show()
+    else:
+        plt.savefig(path)
+
+
 """
 # quick test
 # TODO unit tests
