@@ -167,6 +167,19 @@ def session_limits(resofs_path):
     resofs = [0] + resofs
     return [(resofs[i], resofs[i+1]) for i in range(num_sessions)]
 
+
+def sw(sw_path):
+    """ Read sharp wave timestamps from a .sw file.
+
+        Args:
+            sw_path - path to the .sw file
+        Return:
+            SW timestamps (list of lists)
+    """
+    return readfromtxt(sw_path,
+                       lambda l: [int(ts) for ts in l.strip().split()])
+
+
 # TODO unit tests
 
 
