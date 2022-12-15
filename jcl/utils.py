@@ -194,6 +194,21 @@ def compute_frs(spike_times, sampling_period=0.05):
     """
     return [len(st) / __elapsed(st, sampling_period) if len(st) > 0 else 0 for st in spike_times]
 
+def generate_sliding_windows(bins, window_len, stride=None):
+    """ Generate sliding windows over given bins.
+
+        Args:
+            bins - matrix with binned data
+            window_len - length of each window in number of bins
+            stride - stride between windows (defaults to window_len)
+        Return:
+            Generator with slices of bins.
+    """
+    if stride is None:
+        stride = window_len
+    for start in range(0, bins.shape[1], stride):
+        yield bins[:, start:start+window_len]
+
 # TODO unit tests
 """
 # quick test
