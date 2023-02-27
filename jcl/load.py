@@ -16,7 +16,7 @@ def readfromtxt(file_path, conv_fun=str):
     return lines
 
 
-def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0,1]):
+def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1]):
     """ Load spike times for each neuron from provided '.res' and '.clu' files.
 
         Args:
