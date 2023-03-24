@@ -40,7 +40,7 @@ def plot_map(m: Map, title=None, colorbar_label=None, path=None):
     plt.close()
 
 
-def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, trajectory_2=None):
+def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, ax=None, trajectory_2=None, colorbar=True):
     """ Plot given trajectory.
 
         Args:
@@ -48,8 +48,13 @@ def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, traj
             size - figure size, tuple
             sampling_rate - number of samples per second (Hz)
             title - figure title
-            path - file path to which to save the figure, if none show the figure
+            path - file path at which to save the figure; if `None` and ax is `None` show the figure
+            ax - axes object for plotting; if `None` creates a new one
             trajectory_2 - second animal trajectory during a trial, array of the same shape as trajectory
+            colorbar - whether to plot color bar; default True
+
+        Return:
+            axes object with plotted trajectory
     """
     im = np.ones((size[0]+1, size[1]+1, 3))
 
@@ -66,22 +71,28 @@ def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, traj
             p = [trajectory_2[i][0], trajectory_2[i][1]]
             im[p[0], p[1]] = (0., 1., 0.)
 
-    plt.imshow(im, vmin=0., vmax=1.)
-    plt.xticks([])
-    plt.yticks([])
-    cmap = ScalarMappable(cmap=from_list('time_cmap', [(0., 0., 0.), (1., 0., 1.)]))
-    cb = plt.colorbar(cmap, ticks=[0., 1.])
-    cb.set_ticklabels([0, np.round(trial_duration(trajectory, sampling_rate), 2)])
-    cb.set_label("Time (s)", fontsize=18)
+    show = ax is None and path is None
+
+    if ax is None:
+        f, ax = plt.subplots(1,1)
+    else:
+        f = ax.figure
+    ax.imshow(im, vmin=0., vmax=1.)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    if colorbar:
+        cmap = ScalarMappable(cmap=from_list('time_cmap', [(0., 0., 0.), (1., 0., 1.)]))
+        cb = f.colorbar(cmap, ticks=[0., 1.])
+        cb.set_ticklabels([0, np.round(trial_duration(trajectory, sampling_rate), 2)])
+        cb.set_label("Time (s)", fontsize=18)
 
     if title is not None:
-        plt.title(title, fontsize=24)
-
+        ax.set_title(title, fontsize=24)
     if path is not None:
-        plt.savefig(path)
-    else:
+        ax.savefig(path)
+    if show:
         plt.show()
-    plt.close()
+    return ax
 
 
 def plot_trials_in_session(trial_inds, sampling_rate=None, path=None):
