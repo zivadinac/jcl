@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import lil_matrix, csc_matrix
-from jcl.utils import get_last_spike_time, to_ms, compute_bins
+from jcl.utils import get_last_spike_time, to_ms, compute_bins, compute_frs
 
 def readfromtxt(file_path, conv_fun=str):
     """ Read lines from a text file into a list.
@@ -16,7 +16,7 @@ def readfromtxt(file_path, conv_fun=str):
     return lines
 
 
-def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0,1]):
+def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1]):
     """ Load spike times for each neuron from provided '.res' and '.clu' files.
 
         Args:
@@ -39,6 +39,32 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0,1]):
 
     clusters = np.setdiff1d(clu, exclude_clusters)  # keep only clusters that are not in `exclude_clusters`
     return [res[clu == c] for c in clusters]
+
+
+def make_des(res_path, clu_path, thr=5):
+    """ Determine cell type ('p1' or 'b1') based of firing rates.
+        This function assumes that all recorded cells are from the hippocampus.
+
+        Args:
+            res_path - path to res file (sorted in a non-descending order)
+            clu_path - path to clu file
+            thr - firing rate threshold (if thr > 5 -> 'b1', else 'p1')
+        Return:
+            List of cell types
+    """
+    clu = np.array(readfromtxt(clu_path, conv_fun=int))
+    res = np.array(readfromtxt(res_path, conv_fun=int))
+    assert len(clu) == len(res) or len(clu) == len(res) + 1
+
+    if len(clu) == len(res) + 1:
+        clu = clu[1:]
+
+    clusters = np.setdiff1d(np.unique(clu), [0, 1])
+    print(len([compute_frs([res[clu == c]])[0] for c in clusters]))
+    print(len(clusters))
+    des = {c: "b1" if compute_frs([res[clu == c]])[0] > thr else "p1"
+           for c in clusters}
+    return list(des.values())
 
 
 def slice_spike_times(spike_times, begin_ts, end_ts):
