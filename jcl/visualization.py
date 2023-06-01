@@ -5,6 +5,8 @@ from_list = LinearSegmentedColormap.from_list
 from matplotlib.cm import ScalarMappable
 from jcl.utils import trial_distance, trial_duration
 from jcl.analysis import Map
+import plotly.express as px
+import plotly.graph_objects as go
 
 
 def plot_map(m: Map, title=None, colorbar_label=None, path=None):
@@ -45,54 +47,52 @@ def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, ax=N
 
         Args:
             trajectory - animal trajectory during a trial, array of shape (n,2)
-            size - figure size, tuple
+            size - figure size - tuple (unused - kept only for compatibility, will be removed)
             sampling_rate - number of samples per second (Hz)
             title - figure title
             path - file path at which to save the figure; if `None` and ax is `None` show the figure
-            ax - axes object for plotting; if `None` creates a new one
+            ax - axes object for plotting (plotly figure); if `None` creates a new one
             trajectory_2 - second animal trajectory during a trial, array of the same shape as trajectory
             colorbar - whether to plot color bar; default True
 
         Return:
-            axes object with plotted trajectory
+            Figure with plotted trajectory.
     """
-    im = np.ones((size[0]+1, size[1]+1, 3))
 
-    trajectory = trajectory.astype(np.int16)
-    for i in range(len(trajectory)):
-        cc = i / len(trajectory)
-        color = (cc, 0., cc)
-        p = [trajectory[i][0], trajectory[i][1]]
-        im[p[0], p[1]] = color
+    duration = len(trajectory) / sampling_rate
+    color = np.arange(len(trajectory)) / len(trajectory) * duration
+    fig = px.scatter(x=trajectory[:, 0], y=trajectory[:, 1],
+                     color=color, range_color=(0, duration))
 
-    if trajectory_2 is not None:
-        trajectory_2 = trajectory_2.astype(np.int16)
-        for i in range(len(trajectory_2)):
-            p = [trajectory_2[i][0], trajectory_2[i][1]]
-            im[p[0], p[1]] = (0., 1., 0.)
+    if ax is not None:
+        t = list(fig.select_traces())[0]
+        ax.add_trace(t)
+        fig = ax
 
-    show = ax is None and path is None
+    if colorbar:
+        fig.update_layout(coloraxis_colorbar_title_text = 'Time (s)')
+    else:
+        fig.update(layout_coloraxis_showscale=False)
 
     if ax is None:
-        f, ax = plt.subplots(1,1)
-    else:
-        f = ax.figure
-    ax.imshow(im, vmin=0., vmax=1.)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    if colorbar:
-        cmap = ScalarMappable(cmap=from_list('time_cmap', [(0., 0., 0.), (1., 0., 1.)]))
-        cb = f.colorbar(cmap, ticks=[0., 1.])
-        cb.set_ticklabels([0, np.round(trial_duration(trajectory, sampling_rate), 2)])
-        cb.set_label("Time (s)", fontsize=18)
+        fig.update_xaxes(showgrid=False, visible=False)
+        fig.update_yaxes(showgrid=False, visible=False)
+        fig.update_layout(template="plotly_white")
+        # if figure is provided we don't want to change its style
+
+    if trajectory_2 is not None:
+        t2t = go.Scatter(x=trajectory_2[:, 0], y=trajectory_2[:, 1],
+                         mode="lines", showlegend=False, line_color="green")
+        fig.add_trace(t2t)
 
     if title is not None:
-        ax.set_title(title, fontsize=24)
+        fig.update_layout(title=title)
+
     if path is not None:
-        ax.savefig(path)
-    if show:
-        plt.show()
-    return ax
+        fig.write_image(path)
+    if ax is None and path is None:
+        fig.show()
+    return fig
 
 
 def plot_trials_in_session(trial_inds, sampling_rate=None, path=None):
