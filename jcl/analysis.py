@@ -1,3 +1,4 @@
+from functools import cached_property
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.spatial.distance import cosine
@@ -170,6 +171,24 @@ class FiringRateMap(Map):
 
             self.__sparsity = np.sum(frm * occ) ** 2 / np.sum(frm ** 2 * occ)
         return self.__sparsity
+
+    @cached_property
+    def center(self):
+        if (self.map != 0).sum() == 0:
+            return None
+        return np.squeeze(np.where(self.map == self.peak_fr))
+
+    def correlate(self, other: Map, normalized=False):
+        self_ok = self.__good_idx(self.map) & (self.occupancy.map > 0)
+        other_ok = self.__good_idx(other.map) & (other.occupancy.map > 0)
+        both_ok = (self_ok) & (other_ok)
+        if normalized:
+            sm = self.map_prob[both_ok].flatten()
+            om = other.map_prob[both_ok].flatten()
+        else:
+            sm = self.map[both_ok].flatten()
+            om = other.map[both_ok].flatten()
+        return np.corrcoef(sm, om)[0, 1]
 
     def __compute_frs(self):
         """ Compute mean, median and max firing rates from given firing rate map.
