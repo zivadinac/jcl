@@ -3,3 +3,4 @@ from jcl import utils
 from jcl import visualization
 from jcl import behaviour
 from jcl import analysis
+from jcl import dataset

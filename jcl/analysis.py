@@ -5,29 +5,28 @@ from scipy.spatial.distance import cosine
 
 
 class Binning:
-    @staticmethod
-    def bin_idx(p, bin_size):
+    def __init__(self, bin_size, maze_size):
+        self.bin_size = bin_size
+        self.maze_size = maze_size
+
+    def bin_idx(self, p):
         """ Calculate bin index for given position.
 
             Args:
                 p - position
                 bin_size - size of bins, single number or same shape as `p`
+                maze_size - size of the maze (number of bins per dimension)
             Return:
                 bin index - tuple of the same shape as `p`
         """
-        return tuple((p // bin_size).astype(int))
+        idx = tuple((p // self.bin_size).astype(int))
+        # origin to lower left corner
+        return (self.num_bins[1] - idx[1] - 1, idx[0])
 
-    @staticmethod
-    def num_bins(maze_size, bin_size):
-        """ Calculate number of spatial bins.
-
-            Args:
-                maze_size - size of the maze
-                bin_size - size of a bin
-            Return:
-                number of bins, same shape as maze_size
-        """
-        return 1 + (np.array(maze_size) / bin_size).astype(int)
+    @cached_property
+    def num_bins(self):
+        """ Calculate number of spatial bins (per dimension). """
+        return 1 + (np.array(self.maze_size) / self.bin_size).astype(int)
 
 
 class Map:
@@ -79,21 +78,22 @@ class OccupancyMap(Map):
             Return:
                 occupancy - time in seconds spent in each spatial bin
         """
-        super().__init__(self.__compute_occ(positions, maze_size, bin_size, bin_len, smooth_sd))
+        self.binner = Binning(bin_size, maze_size)
+        super().__init__(self.__compute_occ(positions, self.binner, bin_len, smooth_sd))
         self.bin_size = bin_size
 
     @staticmethod
-    def __compute_occ(positions, maze_size, bin_size, bin_len, smooth_sd=None):
-        occupancy = np.zeros(Binning.num_bins(maze_size, bin_size))
+    def __compute_occ(positions, binner, bin_len, smooth_sd=None):
+        occupancy = np.zeros(binner.num_bins)
 
         for p in positions:
-            bin_idx = Binning.bin_idx(p, bin_size)
+            bin_idx = binner.bin_idx(p)
             occupancy[bin_idx] += bin_len
 
         if smooth_sd is not None:
             occupancy = gaussian_filter(occupancy, smooth_sd)
 
-        return occupancy / 1000 # ms to seconds
+        return occupancy / 1000  # ms to seconds
 
 
 class FiringRateMap(Map):
@@ -224,8 +224,8 @@ class FiringRateMap(Map):
         occupancy = OccupancyMap(positions, maze_size, bin_size, bin_len, smooth_sd)
         frm = np.zeros_like(occupancy.map)
 
-        for  p, sn in zip(positions, spike_train):
-            bin_idx = Binning.bin_idx(p, bin_size)
+        for p, sn in zip(positions, spike_train):
+            bin_idx = occupancy.binner.bin_idx(p)
             frm[bin_idx] += sn
 
         frm = frm / occupancy.map
