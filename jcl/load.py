@@ -16,13 +16,14 @@ def readfromtxt(file_path, conv_fun=str):
     return lines
 
 
-def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1]):
+def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1], ts_limits=None):
     """ Load spike times for each neuron from provided '.res' and '.clu' files.
 
         Args:
             res_path - path to res file (sorted in a non-descending order)
             clu_path - path to clu file
             exclude_clusters - clusters to exclude (by default exclude noise clusters: 0 - artifacts and 1 - unassigned spikes)
+            ts_limits - timestamps used to cut out only a temporal section of data, tuple (begin_ts, end_ts)
         Return:
             List of firing times for each cell (list of np.arrays)
     """
@@ -35,13 +36,19 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1]):
 
     if len(clu) == len(res) + 1:
         # number of clusters is written in the first line
+        num_clusters = clu[0]
         clu = clu[1:]
+    else:
+        num_clusters = np.max(clu)
 
-    clusters = np.setdiff1d(clu, exclude_clusters)  # keep only clusters that are not in `exclude_clusters`
-    return [res[clu == c] for c in clusters]
+    clusters = np.arange(num_clusters)
+    clusters = [res[clu == c] for c in clusters if c not in exclude_clusters]
+    if ts_limits is not None:
+        return slice_spike_times(clusters, *ts_limits)
+    return clusters
 
 
-def make_des(res_path, clu_path, thr=5):
+def make_des(res_path, clu_path, thr=5, sampling_period=0.05):
     """ Determine cell type ('p1' or 'b1') based of firing rates.
         This function assumes that all recorded cells are from the hippocampus.
 
@@ -52,19 +59,9 @@ def make_des(res_path, clu_path, thr=5):
         Return:
             List of cell types
     """
-    clu = np.array(readfromtxt(clu_path, conv_fun=int))
-    res = np.array(readfromtxt(res_path, conv_fun=int))
-    assert len(clu) == len(res) or len(clu) == len(res) + 1
-
-    if len(clu) == len(res) + 1:
-        clu = clu[1:]
-
-    clusters = np.setdiff1d(np.unique(clu), [0, 1])
-    print(len([compute_frs([res[clu == c]])[0] for c in clusters]))
-    print(len(clusters))
-    des = {c: "b1" if compute_frs([res[clu == c]])[0] > thr else "p1"
-           for c in clusters}
-    return list(des.values())
+    spike_times = spike_times_from_res_and_clu(res_path, clu_path)
+    frs = compute_frs(spike_times, sampling_period)
+    return ["b1" if fr > thr else "p1" for fr in frs]
 
 
 def slice_spike_times(spike_times, begin_ts, end_ts):
