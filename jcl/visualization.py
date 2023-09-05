@@ -42,37 +42,78 @@ def plot_map(m: Map, title=None, colorbar_label=None, path=None):
     plt.close()
 
 
-def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, ax=None, trajectory_2=None, colorbar=True):
+def plot_circle(center, radius, color="red", name=None, fig=None):
+    """ Plot circle.
+
+        Args:
+            circle - ((c_x, c_y), r1, color=None)
+            center - (c_x, c_y)
+            redius - radius
+            color - line color
+            name - name to show in the legend, default is None
+            fig - figure to plot on, if None (default) create new
+        Return:
+            fig
+    """
+    if fig is None:
+        fig = go.Figure()
+
+    if radius > 0:
+        x0, x1 = center[0] - radius, center[0] + radius
+        y0, y1 = center[1] - radius, center[1] + radius
+        fig.add_shape(type="circle", xref='x', yref='y',
+                      x0=x0, x1=x1, y0=y0, y1=y1,
+                      line_color=color)
+    scat_args = dict(x=[center[0]], y=[center[1]],
+                     marker_color=color, marker_size=15, showlegend=False)
+    if name is not None:
+        scat_args["name"] = name
+        scat_args["showlegend"] = True
+
+    fig.add_trace(go.Scatter(**scat_args))
+    return fig
+
+
+def plot_trajectory(trajectory, duration=None, title=None, path=None, ax=None, trajectory_2=None, start_box=None, speed=None):
     """ Plot given trajectory.
 
         Args:
             trajectory - animal trajectory during a trial, array of shape (n,2)
-            size - figure size - tuple (unused - kept only for compatibility, will be removed)
-            sampling_rate - number of samples per second (Hz)
+            duration - trial duration in seconds
             title - figure title
             path - file path at which to save the figure; if `None` and ax is `None` show the figure
             ax - axes object for plotting (plotly figure); if `None` creates a new one
             trajectory_2 - second animal trajectory during a trial, array of the same shape as trajectory
-            colorbar - whether to plot color bar; default True
-
+            start_box - coordinates of the start box [(TL_x, TL_y), (BR_x, BR_y)]
+            speed - speed of the animal, can be passed only if `duration` is None
         Return:
             Figure with plotted trajectory.
     """
 
-    duration = len(trajectory) / sampling_rate
-    color = np.arange(len(trajectory)) / len(trajectory) * duration
+    if duration is not None and speed is not None:
+        raise ValueError("Pass only `duration` OR `speed`.")
+
+    if speed is None:
+        color = np.arange(len(trajectory)) / len(trajectory)
+        if duration is not None:
+            color = color * duration
+    else:
+        color = speed
+
     fig = px.scatter(x=trajectory[:, 0], y=trajectory[:, 1],
-                     color=color, range_color=(0, duration))
+                     color=color)
 
     if ax is not None:
         t = list(fig.select_traces())[0]
         ax.add_trace(t)
         fig = ax
 
-    if colorbar:
-        fig.update_layout(coloraxis_colorbar_title_text = 'Time (s)')
+    if speed is None and duration is None:
+        fig.update_layout(coloraxis_showscale=False)
+    elif speed is not None:
+        fig.update_layout(coloraxis_colorbar_title_text="Speed (cm / s)")
     else:
-        fig.update(layout_coloraxis_showscale=False)
+        fig.update_layout(coloraxis_colorbar_title_text="Time (s)")
 
     if ax is None:
         fig.update_xaxes(showgrid=False, visible=False)
@@ -85,13 +126,18 @@ def plot_trajectory(trajectory, size, sampling_rate, title=None, path=None, ax=N
                          mode="lines", showlegend=False, line_color="green")
         fig.add_trace(t2t)
 
+    if start_box is not None:
+        (TL_x, TL_y), (BR_x, BR_y) = start_box
+        sc_x = [TL_x, BR_x, BR_x, TL_x, TL_x]
+        sc_y = [BR_y, BR_y, TL_y, TL_y, BR_y]
+        fig.add_trace(go.Scatter(x=sc_x, y=sc_y,
+                                 line={"color": "black"}, showlegend=False))
+
     if title is not None:
         fig.update_layout(title=title)
 
     if path is not None:
         fig.write_image(path)
-    if ax is None and path is None:
-        fig.show()
     return fig
 
 

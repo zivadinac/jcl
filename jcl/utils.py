@@ -100,6 +100,23 @@ def calc_speed(positions, bin_len):
     return [speed[0]] + speed
 
 
+def speed_filter(positions, bin_len, speed_thr):
+    """ Filter positions based on speed.
+        Return both parts where speed > speed_thr and where speed <= speed_thr.
+
+            positions - array of positions of shape (n,1) or (n,2)
+            bin_len - duration of temporal bins in ms
+            speed_thr - threshold for speed
+        Return:
+            (high_speed_positions, low_speed_positions)
+    """
+    assert speed_thr is not None
+    speed = np.array(calc_speed(positions, bin_len))
+    speed_h_idx = speed > speed_thr
+    speed_l_idx = speed <= speed_thr
+    return positions[speed_h_idx], positions[speed_l_idx]
+
+
 def get_last_spike_time(spike_times):
     """ Get the timestamp of the last spike.
 
@@ -209,7 +226,62 @@ def generate_sliding_windows(bins, window_len, stride=None):
     for start in range(0, bins.shape[1], stride):
         yield bins[:, start:start+window_len]
 
+def traj_in_interval_1D(traj, interval):
+    """ Check which points of the trajectory are in the given interval.
+
+        Args:
+            traj - trajectory, array with `n` elements
+            interval - (begin, end), inclusive
+        Return:
+            True / False array with `n` elements
+    """
+    return (traj >= interval[0]) & (traj <= interval[1])
+
+def traj_in_rect_2D(traj, rect):
+    """ Check which points of the trajectory are in the given rect.
+
+        Args:
+            traj - trajectory, array of shape (n, 2)
+            rect - coordinates of the rect [(TL_x, TL_y), (BR_x, BR_y)]
+
+        Return:
+            True / False array with `n` elements
+    """
+    (TL_x, TL_y), (BR_x, BR_y) = rect
+    x_idx = traj_in_interval_1D(traj[:, 0], (TL_x, BR_x))
+    y_idx = traj_in_interval_1D(traj[:, 1], (BR_y, TL_y))
+    return np.logical_and(x_idx, y_idx)
+
+def traj_in_circle_2D(traj, center, radius):
+    """ Check which points of the trajectory are in the given circle.
+
+        Args:
+            traj - trajectory, array of shape (n, 2)
+            center - coordinates of the center (c_x, c_y)
+            radius - circle radius
+
+        Return:
+            True / False array with `n` elements
+    """
+    return np.linalg.norm(traj - np.array(center), axis=1) ** 2 <= radius ** 2
+
+def res_clu_from_spike_times(st):
+    """ Generate res and clu for given spike times.
+
+        Args:
+            st - spike times, list of lists
+
+        Return:
+            res, clu - np.ndarrays
+    """
+    clu = np.concatenate([len(st_c) * [c] for c, st_c in enumerate(st)])
+    res = np.concatenate(st).astype(np.int64)
+    sort_idx = np.argsort(res)
+    return res[sort_idx], clu[sort_idx]
+
 # TODO unit tests
+
+
 """
 # quick test
 
