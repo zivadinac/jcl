@@ -2,6 +2,7 @@ from functools import cached_property
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.spatial.distance import cosine
+from scipy.signal import convolve2d
 
 
 class Binning:
@@ -115,7 +116,8 @@ class FiringRateMap(Map):
         self.__I_sec = None
         self.__I_spike = None
         self.__sparsity = None
-        self.__frs = None # mean, median, max
+        self.__frs = None  # mean, median, max
+        self.__raw_fr_map = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, smooth_sd=0, return_occupancy=False)
 
     @property
     def occupancy(self):
@@ -171,6 +173,11 @@ class FiringRateMap(Map):
 
             self.__sparsity = np.sum(frm * occ) ** 2 / np.sum(frm ** 2 * occ)
         return self.__sparsity
+
+    @property
+    def coherence(self):
+        r = np.corrcoef(self.__raw_fr_map.flatten(), self.map.flatten())[0, 1]
+        return .5 * np.log((1 + r) / (1 - r))
 
     @cached_property
     def center(self):
@@ -232,7 +239,10 @@ class FiringRateMap(Map):
         frm[np.isnan(frm)] = 0
         frm[np.isinf(frm)] = 0
         frm = gaussian_filter(frm, smooth_sd)
-        return frm, occupancy if return_occupancy else frm
+        if return_occupancy:
+            return frm, occupancy
+        else:
+            return frm
 
     @staticmethod
     def __good_idx(m, eps=None):
