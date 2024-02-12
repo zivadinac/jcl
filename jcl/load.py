@@ -88,7 +88,7 @@ def slice_spike_times(spike_times, begin_ts, end_ts):
     return [st[__get_inds(st, begin_ts, end_ts)] if len(st) > 0 else st for st in spike_times]
 
 
-def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix):
+def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype=np.uint16, dense_loading=True, return_mat_type=csc_matrix, limits=None):
     """ Bin given spike times, each bin contains total number of spikes.
 
         Args:
@@ -98,13 +98,15 @@ def bins_from_spike_times(spike_times, bin_len=25.6, sampling_period=0.05, dtype
             dtype - dtype to use for bins, default np.uint16 (np.uint8 would use less memory, but can store only up to 256 spikes per bin)
             dense_loading - if True (default) load data into a dense np.ndarray then convert to a `return_mat_type` (fast), if False load into a sparse matrix (slow, but memory efficient)
             return_mat_type - type of matrix to be returned (default is sparse `csc_matrix` for efficient storage and relatively fast column slicing)
+            limits - session limits (begin_ts, end_ts), if None (default) use first and last spike time
         Return:
             Matrix with spike count per bin ((neuron num, time bins), `return_mat_type`)
     """
     # leave this two lines here in case we find non-sorted spikes (.res files)
     # maxes = [np.max(st) if len(st) > 0 else 0 for st in spike_times]
     # last_spike_time = to_ms(np.max(maxes), sampling_period)  # in ms
-    bin_edges, bin_num = compute_bins(spike_times, bin_len, sampling_period)
+    limits_ms = None if limits is None else to_ms(np.array(limits), sampling_period)
+    bin_edges, bin_num = compute_bins(spike_times, bin_len, sampling_period, limits=limits_ms)
 
     if dense_loading:
         # fastest loading (due to indexing), but requires a lot of memory

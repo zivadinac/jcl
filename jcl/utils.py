@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.interpolate import UnivariateSpline
 
 
 def align_measured_data(population_vectors, positions, num_bins, speed=None):
@@ -55,6 +56,49 @@ def interpolate_position(x, y=None, unknown_val=-1, interp_order=1):
         y_i = __interpolate_linear_position(y, unknown_val, interp_order)
         return x_i, y_i
     return x_i
+
+
+def resample_whl(whl, new_len, whl_ts_col=None, whl_bl=None, interp_order=1):
+    """ Spline interpolation of missing values in animal position data.
+
+        Args:
+            whl - position data
+            new_len - len for resampled whl
+            whl_ts_col - the column with timestamps; if None provide `whl_bl`
+            whl_bl - whl bin len; used if whl doesn't have timestamps
+            interp_order - interpolation polynom degree, default 1 (linear)
+        Return:
+            Interpolated data in the same format as provided.
+    """
+    if whl_ts_col is not None:
+        orig_ts = whl[:, whl_ts_col]
+    else:
+        orig_ts = whl_bl * np.arange(len(whl))
+    new_ts = orig_ts[-1] * np.arange(new_len) / new_len
+    new_whl = -1 * np.ones((len(new_ts), whl.shape[1]))
+    if whl_ts_col is not None:
+        new_whl[:, -1] = new_ts
+        last_c = whl.shape[1]-1
+    else:
+        last_c = whl.shape[1]
+    for c in range(last_c):
+        position = np.array(whl[:, c])
+        position[position <= 0] = -1
+        ok_idx = np.where(position != -1)[0]
+
+        if position[0] == -1:
+            position[0] = int(np.mean(position[ok_idx[:10]]))
+        if position[-1] == -1:
+            position[-1] = int(np.mean(position[ok_idx[-10:]]))
+
+        position = interpolate_position(position)
+        f = UnivariateSpline(orig_ts, position, k=interp_order)
+        # prevent interpolation from going crazy
+        p_l, p_h = position[ok_idx].min(), position[ok_idx].max()
+        res_position = np.clip(f(new_ts), p_l, p_h)
+
+        new_whl[:, c] = res_position
+    return new_whl
 
 
 def trial_duration(xy_trajectory, sampling_rate=39.0625):
@@ -139,28 +183,35 @@ def get_first_spike_time(spike_times):
     return np.min([st[0] for st in spike_times if len(st) > 0])
 
 
-def compute_bins(spike_times, bin_len=25.6, sampling_period=0.05):
+def compute_bins(spike_times, bin_len=25.6, sampling_period=0.05, limits=None):
     """ Compute bin edges for given spike times.
 
         Args:
             spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
             bin_len - length of a bin in ms (default 1s/39.0625 = 25.6ms)
             sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+            limits - session limits (begin, end) in ms, if None use first and last spike time
         Return:
             List of bin edges (in ms), total number of bins
     """
-    last_spike_time = np.max([to_ms(st[-1], sampling_period) if len(st) > 0 else 0 for st in spike_times])
-    bin_num = np.ceil(last_spike_time / bin_len).astype(int)
-    bin_edges = np.arange(bin_num + 1) * bin_len
+    if limits is None:
+        last_spike_time = to_ms(get_last_spike_time(spike_times), sampling_period)
+        first_spike_time = to_ms(get_first_spike_time(spike_times), sampling_period)
+        limits = (first_spike_time, last_spike_time)
+    bin_num = np.ceil((limits[1] - limits[0]) / bin_len).astype(int)
+    bin_edges = limits[0] + np.arange(bin_num + 1) * bin_len
     return bin_edges, bin_num
 
 
-def concatenate_spike_times(*all_spike_times, shift_sessions=True):
+def concatenate_spike_times(*all_spike_times, shift_sessions=True, session_lims=None):
     """ Concatenate spike times from different sessions (shift appropriately).
 
         Args:
             all_spike_times - spike times (list of lists) for every session
             shift_sessions - if True (default) shift spike times for every session in `all_spike_times`
+            session_lims - session limits - list of (begin_ts, end_ts),
+                           should be of the same length as `all_spike_times`,
+                           if None (default) first and last spike time are used
         Return:
             concatenated spike times (list of lists)
     """
@@ -168,8 +219,11 @@ def concatenate_spike_times(*all_spike_times, shift_sessions=True):
     unit_nums = np.array([len(st) for st in all_spike_times])
     if not np.all(unit_nums == unit_nums[0]):
         raise ValueError("All given spike times (sessions) must have equal number of units.")
-
-    last_spike_times = [get_last_spike_time(st) for st in all_spike_times]
+    if session_lims is not None:
+        assert len(session_lims) == len(all_spike_times)
+        last_spike_times = [sl[1] for sl in session_lims]
+    else:
+        last_spike_times = [get_last_spike_time(st) for st in all_spike_times]
     if shift_sessions:
         session_shifts = [0] + np.cumsum(last_spike_times)[:-1].tolist()
     else:
@@ -278,6 +332,29 @@ def res_clu_from_spike_times(st):
     res = np.concatenate(st).astype(np.int64)
     sort_idx = np.argsort(res)
     return res[sort_idx], clu[sort_idx]
+
+def autocorrelogram(spike_times, dur=51, n_spk=100, sampling_rate=20000):
+    """ Compute spike train autocorrelogram.
+
+        Args:
+            spike_times - list of spike times
+            dur - histogram duration in ms (default is 50)
+            n_spk - number of spikes in future and past to use for histogram
+                    (default is 100)
+            sampling_rate - sampling rate in Hz
+        Return:
+            (times, counts)
+    """
+    bin_edges = np.arange(-dur / 2, dur / 2 + 1)  # ms
+    sts = to_ms(spike_times, 1000 / sampling_rate)
+    cum_hist = np.zeros(len(bin_edges) - 1)
+    for i, st in enumerate(sts):
+        s = np.maximum(0, i-n_spk)
+        dst = st - sts[s:i+n_spk+1]
+        dst[i-s] = np.nan
+        cum_hist += np.histogram(dst, bin_edges)[0]
+    plot_edges = (bin_edges[1:] + bin_edges[:-1]) / 2
+    return plot_edges, cum_hist
 
 # TODO unit tests
 

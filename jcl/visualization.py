@@ -168,6 +168,27 @@ def plot_trials_in_session(trial_inds, sampling_rate=None, path=None):
         plt.savefig(path)
 
 
+def plot_autocorrelogram(times, counts, title='', refractory_period=5):
+    """ Plot spike train autocorrelogram.
+
+        Args:
+            times - bar times
+            counts - bar counts
+            title - figure title (empty by default)
+            refractory_period - refractory period in ms (default is 5);
+                                to be marked with vertical lines
+        Return:
+            plotly.Figure
+    """
+    fig = px.bar(x=times, y=counts)
+    fig.add_vline(x=refractory_period / 2,
+                  line_width=3, line_dash="dash", line_color="orange")
+    fig.add_vline(x=-refractory_period / 2,
+                  line_width=3, line_dash="dash", line_color="orange")
+    fig.update_layout(title_text=title)
+    return fig
+
+
 """
 # quick test
 # TODO unit tests
