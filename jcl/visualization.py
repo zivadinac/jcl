@@ -24,22 +24,15 @@ def plot_map(m: Map, title=None, colorbar_label=None, path=None):
     else:
         im = m.map
 
-    plt.set_cmap("jet")
-    plt.imshow(im)
-
-    cb = plt.colorbar(ticks=[0., np.max(im)])
-    if colorbar_label is not None:
-        cb.set_ticklabels([0, np.round(np.max(im))])
-        cb.set_label("Hz", fontsize=18)
+    fig = px.imshow(im, color_continuous_scale="jet")
+    fig.update_layout(coloraxis_colorbar={"title": colorbar_label})
 
     if title is not None:
-        plt.title(title)
+        fig.update_layout(title=title)
 
     if path is not None:
-        plt.savefig(path)
-    else:
-        plt.show()
-    plt.close()
+        fig.write_image(path)
+    return fig
 
 
 def plot_circle(center, radius, color="red", name=None, fig=None):
@@ -71,6 +64,28 @@ def plot_circle(center, radius, color="red", name=None, fig=None):
         scat_args["showlegend"] = True
 
     fig.add_trace(go.Scatter(**scat_args))
+    return fig
+
+
+def plot_rect(tl_br, color="black", name=None, fig=None):
+    """ Plot rectangle.
+
+        Args:
+            tl_br - ((TL_x, TL_y), (BR_x, BR_y))
+            color - line color
+            name - name to show in the legend, default is None
+            fig - figure to plot on, if None (default) create new
+        Return:
+            fig
+    """
+    if fig is None:
+        fig = go.Figure()
+    (TL_x, TL_y), (BR_x, BR_y) = tl_br
+    sc_x = [TL_x, BR_x, BR_x, TL_x, TL_x]
+    sc_y = [BR_y, BR_y, TL_y, TL_y, BR_y]
+    fig.add_trace(go.Scatter(x=sc_x, y=sc_y,
+                             line={"color": color}, showlegend=False,
+                             name=name))
     return fig
 
 

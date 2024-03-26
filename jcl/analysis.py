@@ -23,6 +23,7 @@ class Binning:
         idx = tuple((p // self.bin_size).astype(int))
         # origin to lower left corner
         return (self.num_bins[1] - idx[1] - 1, idx[0])
+        #return (idx[1], idx[0])
 
     @cached_property
     def num_bins(self):
@@ -118,6 +119,7 @@ class FiringRateMap(Map):
         self.__sparsity = None
         self.__frs = None  # mean, median, max
         self.__raw_fr_map = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, smooth_sd=0, return_occupancy=False)
+        self.binner = self.__occupancy.binner
 
     @property
     def occupancy(self):
