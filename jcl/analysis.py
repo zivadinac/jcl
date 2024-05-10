@@ -259,7 +259,7 @@ class FiringRateMap(Map):
 
 
 class PopulationVectors:
-    def __init__(self, fr_maps):
+    def __init__(self, fr_maps, z_score=False):
         """ Get population vectors from provided firing rate maps.
 
             Args:
@@ -268,6 +268,10 @@ class PopulationVectors:
                 population vectors - np.array of shape (*(fr_maps[0].shape), len(fr_maps))
         """
         self.pvs = np.stack([frm.map for frm in fr_maps], axis=-1)
+        if z_score:
+            m = self.pvs.mean(axis=(0, 1))
+            s = self.pvs.std(axis=(0, 1))
+            self.pvs = (self.pvs - m) / s
 
     @property
     def spatial_shape(self):

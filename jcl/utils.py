@@ -198,9 +198,41 @@ def compute_bins(spike_times, bin_len=25.6, sampling_period=0.05, limits=None):
         last_spike_time = to_ms(get_last_spike_time(spike_times), sampling_period)
         first_spike_time = to_ms(get_first_spike_time(spike_times), sampling_period)
         limits = (first_spike_time, last_spike_time)
-    bin_num = np.ceil((limits[1] - limits[0]) / bin_len).astype(int)
+    bin_num = np.ceil(np.round((limits[1] - limits[0]) / bin_len, 3)).astype(int)
     bin_edges = limits[0] + np.arange(bin_num + 1) * bin_len
     return bin_edges, bin_num
+
+
+def compute_constant_bins(spike_num, spike_times=None, res=None, sampling_period=0.05):
+    """ Compute bin edges such that every bin contains `spike_num` spikes.
+
+        Args:
+            spike_num - number of spikes per bin
+            spike_times - list of spike times per neuron (list of iterables, pre-sorted in a non-descending order)
+            res - spike times; used only if `spike_times` is None
+            sampling_period - sampling period in ms (default 1s/20kHz = 0.05ms)
+        Return:
+            List of bin edges (in ms), total number of bins
+    """
+    assert sum([res is not None, spike_times is not None]) == 1,\
+           "Provide only `spike_times` or only `res`"
+    if res is None:
+        res = []
+        for st in spike_times:
+            res.extend(st)
+        res = sorted(res)
+    res = to_ms(np.array(res), sampling_period)
+    rem = len(res) % spike_num
+    if rem > 0:
+        resm = res[:-rem]
+    else:
+        resm = res
+    resm = resm.reshape(-1, spike_num)
+    b, e = res[0], res[-1]
+    lims = [b] + resm[:, -1].tolist()
+    if rem > 0:
+        lims = lims + [e]
+    return lims, len(lims)
 
 
 def concatenate_spike_times(*all_spike_times, shift_sessions=True, session_lims=None):
