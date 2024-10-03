@@ -126,6 +126,41 @@ def trial_distance(xy_trajectory):
     return distances.sum()
 
 
+def __goal_idx(traj, goals, GR):
+    """ Return entries of first entry and first exit of each goal zone. """
+    first_entry_idx = []
+    first_exit_idx = []
+    for r in goals:
+        in_r = traj_in_circle_2D(traj, r, GR).astype(np.int8)
+        first_entry_idx.append(np.argmax(in_r))
+        first_exit_idx.append(np.where(np.diff(in_r) == -1)[0][0])
+    order_pmt = np.argsort(first_entry_idx)
+    first_entry_idx = np.array(first_entry_idx)[order_pmt]
+    first_exit_idx = np.array(first_exit_idx)[order_pmt]
+    return first_entry_idx, first_exit_idx
+
+
+def trial_to_last_goal(whl, goals, GR=20):
+    """ Return only portion of trial up to the entry of the last goal zone. """
+    first_entry_idx, first_exit_idx = __goal_idx(whl, goals, GR)
+    # part of the traj only before first entry into the last RZ
+    return whl[0:first_entry_idx[-1]]
+
+
+def trial_between_goals(whl, goals, GR=20):
+    """ Return only portion of trial between SB and first goal zone, first goal and second goal zone etc.
+        But not portion from the last goal to the SB. """
+    first_entry_idx, first_exit_idx = __goal_idx(whl, goals, GR)
+    segment_idx = list(zip([0] + first_exit_idx[:-1].tolist(), first_entry_idx))
+    rz_traj = []
+    for si in segment_idx:
+        seg = whl[si[0]:si[1], :]
+        if seg.size == 0:
+            continue
+        rz_traj.append(seg.tolist())
+    return np.concatenate(rz_traj, axis=0)
+
+
 def calc_speed(positions, bin_len):
     """ Calculate animal speed. Units of positions / s.
 
