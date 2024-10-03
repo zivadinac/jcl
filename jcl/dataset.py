@@ -112,6 +112,13 @@ class RecordingDay(AbstractDataset):
         else:
             return self.session_limits[sl[0]][0], self.session_limits[sl[-1]][1]
 
+    def get_session_duration_s(self, sess_name):
+        dur = 0
+        for sn in self.get_session(sess_name):
+            sl = self.session_limits[sn]
+            dur += (sl[1]-sl[0]) / self.sampling_rate
+        return dur
+
     def set_session(self, sess_name, sess_nums):
         """ Define session `sess_name` composed of recording sessions indicated by `sess_nums`.
 
@@ -233,6 +240,7 @@ class RecordingDay(AbstractDataset):
                 sts = load.slice_spike_times(self.__spike_times[_FULL_DAY_SN], *limits)\
                       if _FULL_DAY_SN in self.__spike_times\
                       else spk_times(res_path, clu_path, exclude_clusters, limits)
+                sts = [np.array(st) - limits[0] for st in sts]
                 self.__spike_times[sess_name] = sts
                 self.__st_limits[sess_name] = limits
             else:
