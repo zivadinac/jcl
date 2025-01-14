@@ -156,25 +156,37 @@ class FiringRateMap(Map):
             self.__frs = self.__compute_frs()
         return self.__frs[0]
 
+    def __calc_I_sec(self, fr_map):
+        good = np.logical_and(self.__good_idx(fr_map, self.__eps), self.__good_idx(self.__occupancy.map, self.__eps))
+        frm = fr_map[good]
+        occ = self.__occupancy.map_prob[good]
+        mfr = np.maximum(self.mean_fr, self.__eps)
+        return np.sum(frm * np.log2(frm / mfr) * occ)
+
     @property
     def I_sec(self):
         """ Information of the firing rate map in bits/s. """
         if self.__I_sec is None:
-
-            good = np.logical_and(self.__good_idx(self.map, self.__eps), self.__good_idx(self.__occupancy.map, self.__eps))
-            frm = self.map[good]
-            occ = self.__occupancy.map_prob[good]
-
-            self.__I_sec = np.sum(frm * np.log2(frm / (self.mean_fr + 1e-6)) * occ)
+            self.__I_sec = self.__calc_I_sec(self.map)
         return self.__I_sec
-
 
     @property
     def I_spike(self):
         """ Information of the firing rate map in bits/spike. """
         if self.__I_spike is None:
-            self.__I_spike = self.I_sec / (self.mean_fr + 1e-6)
+            self.__I_spike = self.I_sec / np.maximum(self.mean_fr, self.__eps)
         return self.__I_spike
+
+    def I_sec_shuffle(self, n_sh=100):
+        idx_sh = [np.random.permutation(self.map.size) for _ in range(n_sh)]
+        frm_sh = [self.map.flatten()[idx].reshape(self.map.shape)
+                  for idx in idx_sh]
+        return np.array([self.__calc_I_sec(frm) for frm in frm_sh])
+
+    def I_spike_shuffle(self, n_sh=100):
+        I_sec_sh = self.I_sec_shuffle(n_sh)
+        mfr = np.maximum(self.mean_fr, self.__eps)
+        return I_sec_sh / mfr
 
     @property
     def sparsity(self):
