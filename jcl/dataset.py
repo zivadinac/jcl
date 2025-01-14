@@ -53,6 +53,7 @@ class RecordingDay(AbstractDataset):
         self.__awake = {}
         self.__awake_rest = {}
         self.__swr = {}
+        self.__hse = {}
         self.__st_limits = {}
         self.__eeg = {}
         self.__eegh = {}
@@ -82,6 +83,7 @@ class RecordingDay(AbstractDataset):
         __clear_dict(self.__awake)
         __clear_dict(self.__awake_rest)
         __clear_dict(self.__swr)
+        __clear_dict(self.__hse)
         __clear_dict(self.__st_limits)
         __clear_dict(self.__eeg)
         __clear_dict(self.__eegh)
@@ -111,6 +113,13 @@ class RecordingDay(AbstractDataset):
             return self.session_limits[sl[0]]
         else:
             return self.session_limits[sl[0]][0], self.session_limits[sl[-1]][1]
+
+    def get_session_duration_s(self, sess_name):
+        dur = 0
+        for sn in self.get_session(sess_name):
+            sl = self.session_limits[sn]
+            dur += (sl[1]-sl[0]) / self.sampling_rate
+        return dur
 
     def set_session(self, sess_name, sess_nums):
         """ Define session `sess_name` composed of recording sessions indicated by `sess_nums`.
@@ -222,35 +231,30 @@ class RecordingDay(AbstractDataset):
             return self.__spike_times[sess_name]
         except KeyError:
             spk_times = load.spike_times_from_res_and_clu
-            res_path = self.__make_path("res")
-            clu_path = self.__make_path("clu")
             sls = self.session_limits
             sessions = self.get_session(sess_name)
 
-            if len(sessions) == 1 or np.all(np.diff(sessions) == 1):
+            if len(sessions) == 1:
+                sn = None if sess_name == _FULL_DAY_SN else sessions[0]
+                res_path = self.__make_path("res", sn)
+                clu_path = self.__make_path("clu", sn)
                 fs, ls = sessions[0], sessions[-1]
                 limits = sls[fs][0], sls[ls][1]
-                sts = load.slice_spike_times(self.__spike_times[_FULL_DAY_SN], *limits)\
-                      if _FULL_DAY_SN in self.__spike_times\
-                      else spk_times(res_path, clu_path, exclude_clusters, limits)
+                sts = spk_times(res_path, clu_path, exclude_clusters)
                 self.__spike_times[sess_name] = sts
                 self.__st_limits[sess_name] = limits
             else:
-                s_sts = [load.slice_spike_times(self.__spike_times[_FULL_DAY_SN], *sls[s])\
-                         for s in sessions]\
-                        if _FULL_DAY_SN in self.__spike_times\
-                        else [spk_times(res_path, clu_path, exclude_clusters, sls[s])\
-                              for s in sessions]
+                s_sts = []
+                for sn in sessions:
+                    res_path = self.__make_path("res", sn)
+                    clu_path = self.__make_path("clu", sn)
+                    s_sts.append(spk_times(res_path, clu_path, exclude_clusters))
                 n_cells = len(s_sts[0])
                 assert np.all([len(st) == n_cells for st in s_sts])
-
                 s_lims = [self.session_limits[s] for s in sessions]
-                shifted_st = [[np.array(st[i])-s_lims[sn][0]
-                              for i in range(n_cells)]
-                              for sn, st in enumerate(s_sts)]
                 ss = [0] + np.cumsum([sl[1]-sl[0] for sl in s_lims]).tolist()
                 sts = [np.concatenate([np.array(st[i]) + ss[sn]
-                       for sn, st in enumerate(shifted_st)])
+                       for sn, st in enumerate(s_sts)])
                        for i in range(n_cells)]
                 self.__spike_times[sess_name] = sts
                 self.__st_limits[sess_name] = (ss[0], ss[-1])
@@ -303,27 +307,13 @@ class RecordingDay(AbstractDataset):
         try:
             return self.__whl[sess_name]
         except KeyError:
-            whl = self.__whl[_FULL_DAY_SN] if _FULL_DAY_SN in self.__whl\
-                  else load.positions_from_whl(self.__make_path("whl"))
-            sls = self.session_limits
             sessions = self.get_session(sess_name)
-            if len(sessions) == 1 or np.all(np.diff(sessions) == 1):
-                fs, ls = sessions[0], sessions[-1]
-                b = int(sls[fs][0] / self.sampling_rate * self.whl_sampling_rate)
-                e = int(sls[ls][1] / self.sampling_rate * self.whl_sampling_rate)
-                self.__whl[sess_name] = whl[b:e]
-            else:
-                s_whls = []
-                for s in sessions:
-                    b, e = sls[s]
-                    b = int(b / self.sampling_rate * self.whl_sampling_rate)
-                    e = int(e / self.sampling_rate * self.whl_sampling_rate)
-                    s_whls.append(whl[b:e])
-                self.__whl[sess_name] = np.vstack(s_whls)
+            s_whls = []
+            for s in sessions:
+                whl = load.positions_from_whl(self.__make_path("whl", s))
+                s_whls.append(whl)
+            self.__whl[sess_name] = np.vstack(s_whls)
         return self.__whl[sess_name]
-
-    def __load_binary(self, path, n_ch):
-        return np.fromfile(path, dtype=np.int16).reshape(-1, n_ch)
 
     def eegh(self, sess_name=_FULL_DAY_SN):
         """ Load eegh for given session.
@@ -349,6 +339,9 @@ class RecordingDay(AbstractDataset):
         return self.__binary(sess_name, self.__eeg, "eeg",
                              self.eeg_sampling_rate, self.n_channels)
 
+    def __load_binary(self, path, n_ch):
+        return np.fromfile(path, dtype=np.int16).reshape(-1, n_ch)
+
     def __binary(self, sess_name, holder, ext, sr, n_ch):
         try:
             return holder[sess_name]
@@ -373,6 +366,19 @@ class RecordingDay(AbstractDataset):
         coords = load.readfromtxt(join(self.path, f"{self.day}.rewards"), int)
         assert len(coords) % 2 == 0
         return np.array(coords).reshape(-1, 2).tolist()
+
+    def hse(self, ct, sess_name=_FULL_DAY_SN):
+        """ SWRs for given session.
+
+            Args:
+                sess_name - session name, default is Full-day
+
+            Return:
+                SWRs (array of shape (N, 3))
+        """
+        if ct not in self.__hse.keys():
+            self.__hse[ct] = {}
+        return self.__load_cols_2(sess_name, f"hse.{ct}", self.__hse[ct])
 
     def swr(self, sess_name=_FULL_DAY_SN):
         """ SWRs for given session.
@@ -470,31 +476,11 @@ class RecordingDay(AbstractDataset):
             holder[sess_name] = np.vstack(s_cols)
             return holder[sess_name]
 
-    def __load_cols(self, sess_name, ext, holder):
-        try:
-            return holder[sess_name]
-        except KeyError:
-            cols = holder[_FULL_DAY_SN] if _FULL_DAY_SN in holder\
-                   else np.array(load.sw(self.__make_path(ext)))
-            sls = self.session_limits
-            sessions = self.get_session(sess_name)
-
-            if len(sessions) == 1 or np.all(np.diff(sessions) == 1):
-                fs, ls = sessions[0], sessions[-1]
-                b, e = sls[fs][0], sls[ls][1]
-                idx = np.where((cols[:, 0] >= b) & (cols[:, -1] < e))[0]
-                holder[sess_name] = cols[idx]
-            else:
-                s_cols = []
-                for s in sessions:
-                    b, e = sls[s]
-                    idx = np.where((cols[:, 0] >= b) & (cols[:, -1] < e))[0]
-                    s_cols.append(cols[idx])
-                holder[sess_name] = np.vstack(s_cols)
-        return holder[sess_name]
-
-    def __make_path(self, ext):
-        return join(self.path, f"{self.day}.{ext}")
+    def __make_path(self, ext, sess_num=None):
+        if sess_num:
+            return join(self.path, f"{self.day}_{sess_num}.{ext}")
+        else:
+            return join(self.path, f"{self.day}.{ext}")
 
 class Dataset(AbstractDataset):
     def __init__(self, path, n_tetrodes,
@@ -533,6 +519,17 @@ class Dataset(AbstractDataset):
                 if d.startswith("jc") or
                 d.startswith("mjc") or
                 d.startswith("mDRCCK")]
+
+def combine_datasets(datasets):
+    ds1 = datasets[0]
+    ds = AbstractDataset("", ds1.n_tetrodes,
+                         ds1.sampling_rate, ds1.whl_sampling_rate,
+                         ds1.eeg_sampling_rate, ds1.eegh_sampling_rate)
+    ds.days = {}
+    for dss in datasets:
+        ds.days = ds.days | dss.days
+    return ds
+
 
 """
 from time import time
