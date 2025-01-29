@@ -114,7 +114,7 @@ class RecordingDay(AbstractDataset):
         else:
             return self.session_limits[sl[0]][0], self.session_limits[sl[-1]][1]
 
-    def get_session_duration_s(self, sess_name):
+    def get_session_duration_s(self, sess_name="Full-day"):
         dur = 0
         for sn in self.get_session(sess_name):
             sl = self.session_limits[sn]
@@ -461,7 +461,11 @@ class RecordingDay(AbstractDataset):
         try:
             return holder[sess_name]
         except KeyError:
-            sessions = self.get_session(sess_name)
+            if sess_name == _FULL_DAY_SN:
+                # all sessions together, but load them one at a time
+                sessions = list(range(1, len(self.session_limits)))
+            else:
+                sessions = self.get_session(sess_name)
             sls = self.session_limits
             sld = [sls[s][1]-sls[s][0] for s in sessions]
             offsets = [0] + np.cumsum(sld[:-1]).tolist()
