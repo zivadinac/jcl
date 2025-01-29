@@ -69,9 +69,41 @@ class Map:
     def size(self):
         return self.__map.size
 
+    def shift(self, shift, axis=None):
+        """ Shift map along given axis.
+            Args:
+                shift - amount to shift by
+                axis - axis to shift along
+                       if None (default) shift along all axes
+            Return:
+                shifted Map
+        """
+        shifted_map = self.map.copy()
+        axes = range(self.map.ndim) if axis is None else [axis]
+        for a in axes:
+            shifted_map = np.roll(shifted_map, shift, axis=a)
+        return type(self)(mmap=shifted_map)
+
+    def random_shift(self, axis=None):
+        """ Randomly shift map along given axis.
+            The amount of shift is at most map.shape-1.
+            Args:
+                axis - axis to shift along
+                       if None (default) shift randomly along all axes
+            Return:
+                randomly shifted Map
+        """
+        shifted_map = self.map.copy()
+        axes = range(self.map.ndim) if axis is None else [axis]
+        shifts = [np.random.randint(1, self.shape[a] - 1) for a in axes]
+        for a, s in zip(axes, shifts):
+            shifted_map = np.roll(shifted_map, s, axis=a)
+        return type(self)(mmap=shifted_map)
+
+
 
 class OccupancyMap(Map):
-    def __init__(self, positions, maze_size, bin_size, bin_len, min_thr=.256, smooth_sd=None):
+    def __init__(self, positions, maze_size, bin_size, bin_len, min_thr=.256, smooth_sd=None, mmap=None):
         """ Produce occupancy map.
 
             Args:
@@ -81,14 +113,22 @@ class OccupancyMap(Map):
                 bin_len - duration of temporal bins in ms
                 min_thr - zero-out bins with occupancy smaller than this
                 smooth_sd - SD in bins for gaussian smoothing
+                mmap - map to use as occupancy map, if provided previous args should be None
             Return:
                 occupancy - time in seconds spent in each spatial bin
         """
-        if maze_size is None:
-            maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
-        self.binner = Binning(bin_size, maze_size)
-        super().__init__(self.__compute_occ(positions, self.binner, bin_len, min_thr, smooth_sd))
+        if mmap is not None:
+            occ = mmap
+            bin_size = None
+            binner = None
+        else:
+            if maze_size is None:
+                maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
+            binner = Binning(bin_size, maze_size)
+            occ = self.__compute_occ(positions, binner, bin_len, min_thr, smooth_sd)
+        super().__init__(occ)
         self.bin_size = bin_size
+        self.binner = binner
 
     @staticmethod
     def __compute_occ(positions, binner, bin_len, min_thr, smooth_sd=None):
@@ -112,7 +152,7 @@ class OccupancyMap(Map):
 
 
 class FiringRateMap(Map):
-    def __init__(self, spike_train, positions, maze_size, bin_size, bin_len, occ_thr=.256, smooth_sd=3):
+    def __init__(self, spike_train=None, positions=None, maze_size=None, bin_size=None, bin_len=None, occ_thr=.256, smooth_sd=3, mmap=None, occ=None):
         """ Produce firing rate map for the given single cell spike train.
 
             Args:
@@ -122,10 +162,20 @@ class FiringRateMap(Map):
                 bin_len - duration of temporal bins in ms
                 occ_thr - zero-out bins with occupancy smaller than this
                 smooth_sd - SD in bins for gaussian smoothing
+                mmap - map to use as firing rate map, if provided previous args should be None
+                occ - occupancy map to use if `mmap` is provided
             """
-        if maze_size is None:
-            maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
-        __fr_map, __occupancy = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=3, return_occupancy=True)
+        if mmap is not None:
+            __fr_map = mmap
+            __raw_fr_map = None
+            __occupancy = occ
+            binner = None
+        else:
+            if maze_size is None:
+                maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
+            __fr_map, __occupancy = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=smooth_sd, return_occupancy=True)
+            __raw_fr_map = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=0, return_occupancy=False)
+            binner = __occupancy.binner
         super().__init__(__fr_map)
         self.__occupancy = __occupancy
         self.bin_size = bin_size
@@ -134,8 +184,8 @@ class FiringRateMap(Map):
         self.__I_spike = None
         self.__sparsity = None
         self.__frs = None  # mean, median, max
-        self.__raw_fr_map = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=0, return_occupancy=False)
-        self.binner = self.__occupancy.binner
+        self.__raw_fr_map = __raw_fr_map
+        self.binner = binner
 
     @property
     def occupancy(self):
@@ -156,25 +206,37 @@ class FiringRateMap(Map):
             self.__frs = self.__compute_frs()
         return self.__frs[0]
 
+    def __calc_I_sec(self, fr_map):
+        good = np.logical_and(self.__good_idx(fr_map, self.__eps), self.__good_idx(self.__occupancy.map, self.__eps))
+        frm = fr_map[good]
+        occ = self.__occupancy.map_prob[good]
+        mfr = np.maximum(self.mean_fr, self.__eps)
+        return np.sum(frm * np.log2(frm / mfr) * occ)
+
     @property
     def I_sec(self):
         """ Information of the firing rate map in bits/s. """
         if self.__I_sec is None:
-
-            good = np.logical_and(self.__good_idx(self.map, self.__eps), self.__good_idx(self.__occupancy.map, self.__eps))
-            frm = self.map[good]
-            occ = self.__occupancy.map_prob[good]
-
-            self.__I_sec = np.sum(frm * np.log2(frm / (self.mean_fr + 1e-6)) * occ)
+            self.__I_sec = self.__calc_I_sec(self.map)
         return self.__I_sec
-
 
     @property
     def I_spike(self):
         """ Information of the firing rate map in bits/spike. """
         if self.__I_spike is None:
-            self.__I_spike = self.I_sec / (self.mean_fr + 1e-6)
+            self.__I_spike = self.I_sec / np.maximum(self.mean_fr, self.__eps)
         return self.__I_spike
+
+    def I_sec_shuffle(self, n_sh=100):
+        idx_sh = [np.random.permutation(self.map.size) for _ in range(n_sh)]
+        frm_sh = [self.map.flatten()[idx].reshape(self.map.shape)
+                  for idx in idx_sh]
+        return np.array([self.__calc_I_sec(frm) for frm in frm_sh])
+
+    def I_spike_shuffle(self, n_sh=100):
+        I_sec_sh = self.I_sec_shuffle(n_sh)
+        mfr = np.maximum(self.mean_fr, self.__eps)
+        return I_sec_sh / mfr
 
     @property
     def sparsity(self):
@@ -302,9 +364,28 @@ class PopulationVectors:
             s = self.pvs.std(axis=(0, 1))
             self.pvs = (self.pvs - m) / s
 
+    def from_pvs(self, pvs, z_score=False):
+        self.pvs = pvs
+        """ Get population vectors from provided population vectors.
+
+            Args:
+                pvs - population vectors, 3D np.array
+            Return:
+                population vectors
+        """
+        if z_score:
+            m = self.pvs.mean(axis=(0, 1))
+            s = self.pvs.std(axis=(0, 1))
+            self.pvs = (self.pvs - m) / s
+        return self
+
     @property
     def spatial_shape(self):
         return self.pvs.shape[:-1]
+
+    @property
+    def num_cells(self):
+        return self.pvs.shape[-1]
 
     def measure(self, other, measure_fun):
         """ Compute measure `measure_fun` between all pairs of population vectors.
