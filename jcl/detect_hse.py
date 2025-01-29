@@ -35,12 +35,13 @@ if __name__ == "__main__":
     basename = args.sess_basename
 
     try:
-        ct = cell_types(basename + ".des")[1:]
+        ct = cell_types(basename + ".des")
     except FileNotFoundError:
         pos = basename.rfind('_')
-        ct = cell_types(basename[:pos] + ".des")[1:]
+        ct = cell_types(basename[:pos] + ".des")
 
     bins = load_bins(basename + ".res", basename + ".clu", BL, SP)
+    ct = ct[-bins.shape[0]:]
     bins_ct = bins[ct == CT].astype(np.float32).toarray()
     pop = gaussian_filter1d(bins_ct.sum(axis=0), SIGMA)
     pop_z = (pop - pop.mean()) / pop.std()
