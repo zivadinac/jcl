@@ -132,6 +132,8 @@ def __goal_idx(traj, goals, GR):
     first_exit_idx = []
     for r in goals:
         in_r = traj_in_circle_2D(traj, r, GR).astype(np.int8)
+        if in_r.sum() <= 0:
+            continue
         first_entry_idx.append(np.argmax(in_r))
         first_exit_idx.append(np.where(np.diff(in_r) == -1)[0][0])
     order_pmt = np.argsort(first_entry_idx)

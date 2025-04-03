@@ -103,7 +103,7 @@ class Map:
 
 
 class OccupancyMap(Map):
-    def __init__(self, positions, maze_size, bin_size, bin_len, min_thr=.256, smooth_sd=None, mmap=None):
+    def __init__(self, positions, maze_size, bin_size, bin_len, min_thr=None, smooth_sd=None, mmap=None):
         """ Produce occupancy map.
 
             Args:
@@ -111,7 +111,7 @@ class OccupancyMap(Map):
                 maze_size - size of the maze in the same units as positions
                 bin_size - size of spatial bins in the same units as positions
                 bin_len - duration of temporal bins in ms
-                min_thr - zero-out bins with occupancy smaller than this
+                min_thr - zero-out bins with occupancy shorter than this (in milliseconds)
                 smooth_sd - SD in bins for gaussian smoothing
                 mmap - map to use as occupancy map, if provided previous args should be None
             Return:
@@ -125,6 +125,8 @@ class OccupancyMap(Map):
             if maze_size is None:
                 maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
             binner = Binning(bin_size, maze_size)
+            if min_thr is None:
+                min_thr = 0
             occ = self.__compute_occ(positions, binner, bin_len, min_thr, smooth_sd)
         super().__init__(occ)
         self.bin_size = bin_size
@@ -143,7 +145,8 @@ class OccupancyMap(Map):
                 raise e
 
         # set rarely visited bins to zero
-        occupancy[occupancy < (min_thr * 1000)] = 0.
+        if min_thr is not None and min_thr > 0:
+            occupancy[occupancy < min_thr] = 0.
 
         if smooth_sd is not None:
             occupancy = gaussian_filter(occupancy, smooth_sd)
@@ -152,7 +155,9 @@ class OccupancyMap(Map):
 
 
 class FiringRateMap(Map):
-    def __init__(self, spike_train=None, positions=None, maze_size=None, bin_size=None, bin_len=None, occ_thr=.256, smooth_sd=3, mmap=None, occ=None):
+    def __init__(self, spike_train=None, positions=None,
+                 maze_size=None, bin_size=None, bin_len=None,
+                 occ_thr=0, smooth_sd=3, mmap=None, occ=None):
         """ Produce firing rate map for the given single cell spike train.
 
             Args:
@@ -160,7 +165,8 @@ class FiringRateMap(Map):
                 maze_size - size of the maze in the same units as positions
                 bin_size - size of spatial bins in the same units as positions
                 bin_len - duration of temporal bins in ms
-                occ_thr - zero-out bins with occupancy smaller than this
+                occ_thr - zero-out bins with occupancy shorter than this
+                          (in milliseconds, default 0)
                 smooth_sd - SD in bins for gaussian smoothing
                 mmap - map to use as firing rate map, if provided previous args should be None
                 occ - occupancy map to use if `mmap` is provided
@@ -173,8 +179,14 @@ class FiringRateMap(Map):
         else:
             if maze_size is None:
                 maze_size = np.ceil(positions.max(axis=0)).astype(int) + 1
-            __fr_map, __occupancy = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=smooth_sd, return_occupancy=True)
-            __raw_fr_map = self.__compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=0, return_occupancy=False)
+            __fr_map, __occupancy = self.__compute_frm(spike_train, positions,
+                                                       maze_size, bin_size, bin_len,
+                                                       occ_thr=occ_thr, smooth_sd=smooth_sd,
+                                                       return_occupancy=True)
+            __raw_fr_map = self.__compute_frm(spike_train, positions,
+                                              maze_size, bin_size, bin_len,
+                                              occ_thr=0, smooth_sd=0,
+                                              return_occupancy=False)
             binner = __occupancy.binner
         super().__init__(__fr_map)
         self.__occupancy = __occupancy
@@ -306,7 +318,8 @@ class FiringRateMap(Map):
         return frm.mean(), np.median(frm), frm.max()
 
     @staticmethod
-    def __compute_frm(spike_train, positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd=3, return_occupancy=False):
+    def __compute_frm(spike_train, positions, maze_size, bin_size, bin_len,
+                      occ_thr, smooth_sd=3, return_occupancy=False):
         """ Produce firing rate map for the given single cell spike train.
 
             Args:
@@ -314,14 +327,15 @@ class FiringRateMap(Map):
                 maze_size - size of the maze in the same units as positions
                 bin_size - size of spatial bins in the same units as positions
                 bin_len - duration of temporal bins in ms
-                occ_thr - zero-out bins with occupancy smaller than this
                 smooth_sd - SD in bins for gaussian smoothing
                 return_occupancy - whether to return occupancy map
             Return:
                 firing rate map - matrix with firing rate (Hz) in each spatial bin
         """
         assert len(spike_train) == len(positions)
-        occupancy = OccupancyMap(positions, maze_size, bin_size, bin_len, occ_thr, smooth_sd)
+        occupancy = OccupancyMap(positions=positions, maze_size=maze_size,
+                                 bin_size=bin_size, bin_len=bin_len,
+                                 min_thr=occ_thr, smooth_sd=smooth_sd)
         frm = np.zeros_like(occupancy.map)
 
         for p, sn in zip(positions, spike_train):
@@ -387,7 +401,7 @@ class PopulationVectors:
     def num_cells(self):
         return self.pvs.shape[-1]
 
-    def measure(self, other, measure_fun):
+    def measure(self, other, measure_fun, rm_nans=True):
         """ Compute measure `measure_fun` between all pairs of population vectors.
 
             Args:
@@ -399,25 +413,30 @@ class PopulationVectors:
         assert self.pvs.shape == other.pvs.shape
         spatial_shape = self.pvs.shape[:-1]
         measure = np.array([measure_fun(self.pvs[idx], other.pvs[idx]) for idx in np.ndindex(spatial_shape)])
-        return measure[~np.isnan(measure)]
+        if rm_nans:
+            return measure[~np.isnan(measure)]
+        else:
+            return measure
 
-    def correlation(self, other):
+    def correlation(self, other, rm_nans=True):
         """ Compute Pearson correlation coefficients between all pairs of population vectors.
 
             Args:
                 other - other population vectors
+                rm_nans - if True (default) return only valid corrs, otherwise return all
             Return:
                 correlation coefficients - list of correlation coefficients
         """
-        return self.measure(other, lambda pv1, pv2: np.corrcoef(pv1, pv2)[0,1])
+        return self.measure(other, lambda pv1, pv2: np.corrcoef(pv1, pv2)[0,1], rm_nans)
 
-    def cosine_distance(self, other):
+    def cosine_distance(self, other, rm_nans=True):
         """ Compute correlation coefficients between all pairs of population vectors.
 
             Args:
                 other - other population vectors
+                rm_nans - if True (default) return only valid corrs, otherwise return all
             Return:
                 list of cosine distances
         """
-        return self.measure(other, cosine)
+        return self.measure(other, cosine, rm_nans)
 
