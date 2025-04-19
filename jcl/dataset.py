@@ -281,6 +281,7 @@ class RecordingDay(AbstractDataset):
             st = self.spike_times(sess_name, exclude_clusters)
             sp = 1000 / self.sampling_rate
             limits = self.__st_limits[sess_name]
+            limits = (0, limits[1]-limits[0])
             bins = binning_fun(st) if binning_fun else bin_len
             bs, be = load.bins_from_spike_times(st, bins, sp, limits=limits,
                                                 return_edges=True)
