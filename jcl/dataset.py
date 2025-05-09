@@ -209,6 +209,10 @@ class RecordingDay(AbstractDataset):
         return load.readfromtxt(self.__make_path("desen"), lambda s: s.strip())
 
     @cached_property
+    def desel(self):
+        return load.readfromtxt(self.__make_path("desel"), lambda s: s.strip())
+
+    @cached_property
     def des(self):
         return load.readfromtxt(self.__make_path("des"), lambda s: s.strip())
 
