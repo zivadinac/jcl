@@ -135,7 +135,10 @@ def __goal_idx(traj, goals, GR):
         if in_r.sum() <= 0:
             continue
         first_entry_idx.append(np.argmax(in_r))
-        first_exit_idx.append(np.where(np.diff(in_r) == -1)[0][0])
+        if len(exits := np.where(np.diff(in_r) == -1)[0]) <= 0:
+            first_exit_idx.append(first_entry_idx[-1])  # no exit
+        else:
+            first_exit_idx.append(exits[0])
     order_pmt = np.argsort(first_entry_idx)
     first_entry_idx = np.array(first_entry_idx)[order_pmt]
     first_exit_idx = np.array(first_exit_idx)[order_pmt]
@@ -145,6 +148,8 @@ def __goal_idx(traj, goals, GR):
 def trial_to_last_goal(whl, goals, GR=20):
     """ Return only portion of trial up to the entry of the last goal zone. """
     first_entry_idx, first_exit_idx = __goal_idx(whl, goals, GR)
+    if first_entry_idx is None or len(first_entry_idx) <= 0:
+        return None
     # part of the traj only before first entry into the last RZ
     return whl[0:first_entry_idx[-1]]
 
