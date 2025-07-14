@@ -218,7 +218,7 @@ class RecordingDay(AbstractDataset):
 
     @cached_property
     def num_cells(self):
-        return len(self.des) - 1
+        return len(self.des)
 
     def spike_times(self, sess_name=_FULL_DAY_SN, exclude_clusters=[0, 1]):
         """ Load spike times for given session.

@@ -41,7 +41,7 @@ def spike_times_from_res_and_clu(res_path, clu_path, exclude_clusters=[0, 1], ts
     else:
         num_clusters = np.max(clu)
 
-    clusters = np.arange(num_clusters)
+    clusters = np.arange(num_clusters+1)
     clusters = [res[clu == c] for c in clusters if c not in exclude_clusters]
     if ts_limits is not None:
         return slice_spike_times(clusters, *ts_limits)

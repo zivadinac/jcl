@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-def plot_map(m: Map, title=None, colorbar_label=None, path=None):
+def plot_map(m: Map, title=None, colorbar_label=None, path=None, color_scale="jet"):
     """ Plot given with added color bar."
 
         Args:
@@ -24,7 +24,7 @@ def plot_map(m: Map, title=None, colorbar_label=None, path=None):
     else:
         im = m.map
 
-    fig = px.imshow(im, color_continuous_scale="jet")
+    fig = px.imshow(im, color_continuous_scale=color_scale)
     fig.update_layout(coloraxis_colorbar={"title": colorbar_label})
 
     if title is not None:
