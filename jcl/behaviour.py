@@ -21,8 +21,10 @@ def in_area(trajectory, corners):
         Return:
             Boolean array of shape (N,)
     """
-    x_idx = (corners[0][0] <= trajectory[:, 0]) & (trajectory[:, 0] <= corners[1][0])
-    y_idx = (corners[0][1] <= trajectory[:, 1]) & (trajectory[:, 1] <= corners[1][1])
+    x_idx = (corners[0][0] <= trajectory[:, 0]) &\
+            (trajectory[:, 0] <= corners[1][0])
+    y_idx = (corners[0][1] <= trajectory[:, 1]) &\
+            (trajectory[:, 1] <= corners[1][1])
     return x_idx & y_idx
 
 

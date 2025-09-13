@@ -19,6 +19,7 @@ class AbstractDataset():
     whl_sampling_rate: float
     eeg_sampling_rate: float
     eegh_sampling_rate: float
+    sess_num_leading_zeros: int
 
     @property
     def n_channels(self):
@@ -29,17 +30,20 @@ class RecordingDay(AbstractDataset):
                  sampling_rate=20000,
                  whl_sampling_rate=39.0625,
                  eeg_sampling_rate=1250,
-                 eegh_sampling_rate=5000):
+                 eegh_sampling_rate=5000,
+                 sess_num_leading_zeros=0):
         """ Contruct object for holding data from a single recording day.
 
             Args:
                 path - path to the dataset (directory with clu, res, des... files)
                 sampling_rate - sampling rate in Hz
                 whl_sampling_rate - whl sampling rate in Hz
+                sess_num_leading_zeros - number of leading zeros for session numbers (in filenames), default 0
         """
         super().__init__(path, n_tetrodes,
                          sampling_rate, whl_sampling_rate,
-                         eeg_sampling_rate, eegh_sampling_rate)
+                         eeg_sampling_rate, eegh_sampling_rate,
+                         sess_num_leading_zeros)
         self.__day = basename(path)
         self.__sessions = {_FULL_DAY_SN: [0]}
         self.__spike_times = {}
@@ -487,7 +491,8 @@ class RecordingDay(AbstractDataset):
 
     def __make_path(self, ext, sess_num=None):
         if sess_num:
-            return join(self.path, f"{self.day}_{sess_num}.{ext}")
+            nd = self.sess_num_leading_zeros + 1
+            return join(self.path, f"{self.day}_{sess_num:0{nd}d}.{ext}")
         else:
             return join(self.path, f"{self.day}.{ext}")
 
@@ -496,7 +501,8 @@ class Dataset(AbstractDataset):
                  sampling_rate=20000,
                  whl_sampling_rate=39.0625,
                  eeg_sampling_rate=1250,
-                 eegh_sampling_rate=5000):
+                 eegh_sampling_rate=5000,
+                 sess_num_leading_zeros=0):
         """ Contruct dataset object.
 
             Args:
@@ -506,13 +512,16 @@ class Dataset(AbstractDataset):
                 whl_sampling_rate - whl sampling rate in Hz (default is 39.0625)
                 eeg_sampling_rate - whl sampling rate in Hz (default is 1250)
                 eegh_sampling_rate - whl sampling rate in Hz (default is 5000)
+                sess_num_leading_zeros - number of leading zeros for session numbers (in filenames), default 0
         """
         super().__init__(path, n_tetrodes,
                          sampling_rate, whl_sampling_rate,
-                         eeg_sampling_rate, eegh_sampling_rate)
+                         eeg_sampling_rate, eegh_sampling_rate,
+                         sess_num_leading_zeros)
         self.__days = {d: RecordingDay(join(path, d), n_tetrodes,
                                        sampling_rate, whl_sampling_rate,
-                                       eeg_sampling_rate, eegh_sampling_rate)
+                                       eeg_sampling_rate, eegh_sampling_rate,
+                                       sess_num_leading_zeros)
                        for d in self._list_days(self.path)}
 
     @property
