@@ -542,7 +542,8 @@ def combine_datasets(datasets):
     ds1 = datasets[0]
     ds = AbstractDataset("", ds1.n_tetrodes,
                          ds1.sampling_rate, ds1.whl_sampling_rate,
-                         ds1.eeg_sampling_rate, ds1.eegh_sampling_rate)
+                         ds1.eeg_sampling_rate, ds1.eegh_sampling_rate,
+                         ds1.sess_num_leading_zeros)
     ds.days = {}
     for dss in datasets:
         ds.days = ds.days | dss.days
