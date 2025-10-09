@@ -480,7 +480,7 @@ class RecordingDay(AbstractDataset):
             offsets = [0] + np.cumsum(sld[:-1]).tolist()
             s_cols = []
             for s, o in zip(sessions, offsets):
-                p = join(self.path, f"{self.day}_{s}.{ext}")
+                p = self.__make_path(ext, s)
                 c = np.array(load.sw(p))
                 if c.size > 0:
                     s_cols.append(c + o)
