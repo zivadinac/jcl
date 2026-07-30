@@ -358,7 +358,7 @@ class RecordingDay(AbstractDataset):
             sessions = self.get_session(sess_name)
             # load from disk
             # assume that each session has a separate .eegh file
-            paths = [join(self.path, f"{self.day}_{sn}.{ext}")
+            paths = [self.__make_path(ext, sn)
                      for sn in sessions]
             eeghs = [self.__load_binary(p, n_ch)
                      for p in paths]
